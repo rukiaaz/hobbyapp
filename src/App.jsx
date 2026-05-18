@@ -77,6 +77,29 @@ export default function App() {
     setAuthMode(view);
   }
 
+  async function handleAuthComplete(user) {
+    if (!user) {
+      setAuthMode('login');
+      return;
+    }
+
+    setCurrentUser(user);
+    setIsAuthReady(false);
+    setProfileError('');
+
+    try {
+      const savedProfile = await getVibelyProfile(user.uid);
+      setVibelyProfile(savedProfile);
+    } catch (error) {
+      setVibelyProfile(null);
+      setProfileError(
+        `Could not load your Vibely profile from Firestore. Check your Firestore rules. (${error.code ?? 'unknown-error'})`,
+      );
+    } finally {
+      setIsAuthReady(true);
+    }
+  }
+
   async function handleCreateVibelyProfile(profileData) {
     setProfileError('');
 
@@ -158,7 +181,7 @@ export default function App() {
       ) : (
         <AuthPage
           mode={authMode}
-          onComplete={() => setAuthMode('login')}
+          onComplete={handleAuthComplete}
           onModeChange={setAuthMode}
         />
       )}

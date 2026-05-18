@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
-  getRedirectResult,
   signInWithEmailAndPassword,
-  signInWithRedirect,
+  signInWithPopup,
   updateProfile,
 } from 'firebase/auth';
 import { auth, googleProvider, isFirebaseConfigured } from '../../services/firebase.js';
@@ -30,7 +29,7 @@ function getFriendlyAuthError(error) {
     'auth/network-request-failed': 'Network request failed. Check your internet connection and try again.',
     'auth/operation-not-allowed':
       'This sign-in provider is not enabled. Enable Email/Password and Google in Firebase Console → Authentication → Sign-in method.',
-    'auth/popup-blocked': 'The Google sign-in popup was blocked. Try the Google redirect sign-in again.',
+    'auth/popup-blocked': 'The Google sign-in popup was blocked. Allow popups for this site and try again.',
     'auth/popup-closed-by-user': 'The Google sign-in popup was closed before completing sign-in.',
     'auth/too-many-requests': 'Too many attempts. Wait a moment and try again.',
     'auth/unauthorized-domain':
@@ -51,32 +50,6 @@ export default function AuthPage({ mode = 'login', onComplete, onModeChange }) {
     : 'Log in to return to your hobbies, creators, and saved inspiration.';
 
   useEffect(() => {
-    let isMounted = true;
-
-    if (!isFirebaseConfigured) {
-      return () => {
-        isMounted = false;
-      };
-    }
-
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result && isMounted) {
-          onComplete?.();
-        }
-      })
-      .catch((error) => {
-        if (isMounted) {
-          setStatusMessage(getFriendlyAuthError(error));
-        }
-      });
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
     setStatusMessage('');
   }, [mode]);
 
@@ -90,8 +63,8 @@ export default function AuthPage({ mode = 'login', onComplete, onModeChange }) {
     setStatusMessage('');
 
     try {
-      await action();
-      onComplete?.();
+      const result = await action();
+      onComplete?.(result?.user);
     } catch (error) {
       setStatusMessage(getFriendlyAuthError(error));
     } finally {
@@ -110,6 +83,7 @@ export default function AuthPage({ mode = 'login', onComplete, onModeChange }) {
     await runAuthAction(async () => {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(userCredential.user, { displayName: name });
+      return userCredential;
     }, 'Add your Firebase values to .env.local before creating an account.');
   }
 
@@ -120,12 +94,14 @@ export default function AuthPage({ mode = 'login', onComplete, onModeChange }) {
     }
 
     setIsLoading(true);
-    setStatusMessage('Redirecting to Google sign-in...');
+    setStatusMessage('Opening Google account picker...');
 
     try {
-      await signInWithRedirect(auth, googleProvider);
+      const result = await signInWithPopup(auth, googleProvider);
+      onComplete?.(result.user);
     } catch (error) {
       setStatusMessage(getFriendlyAuthError(error));
+    } finally {
       setIsLoading(false);
     }
   }
