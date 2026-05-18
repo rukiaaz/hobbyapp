@@ -10,7 +10,7 @@ import VibelyOnboarding from './components/onboarding/VibelyOnboarding.jsx';
 import PostGrid from './components/posts/PostGrid.jsx';
 import ProfileHeader from './components/profile/ProfileHeader.jsx';
 import SuggestedCreators from './components/sidebar/SuggestedCreators.jsx';
-import { auth } from './services/firebase.js';
+import { auth, isFirebaseConfigured } from './services/firebase.js';
 import { getVibelyProfile, saveVibelyProfile, toAppProfile } from './services/vibelyProfile.js';
 
 function needsEmailVerification(user) {
@@ -21,7 +21,11 @@ export default function App() {
   const [authMode, setAuthMode] = useState('login');
   const [currentUser, setCurrentUser] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
-  const [authNotice, setAuthNotice] = useState('');
+  const [authNotice, setAuthNotice] = useState(() =>
+    isFirebaseConfigured
+      ? ''
+      : 'Add your Firebase values to .env.local (copy from .env.example) before signing in.',
+  );
   const [profileError, setProfileError] = useState('');
   const [vibelyProfile, setVibelyProfile] = useState(null);
 
@@ -32,6 +36,13 @@ export default function App() {
 
   useEffect(() => {
     let isMounted = true;
+
+    if (!auth) {
+      setCurrentUser(null);
+      setVibelyProfile(null);
+      setIsAuthReady(true);
+      return undefined;
+    }
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setIsAuthReady(false);
@@ -45,7 +56,9 @@ export default function App() {
       }
 
       if (needsEmailVerification(user)) {
-        await signOut(auth);
+        if (auth) {
+          await signOut(auth);
+        }
         setCurrentUser(null);
         setVibelyProfile(null);
         setAuthNotice('Please verify your email before entering Hobby App. Check your inbox and spam folder.');
@@ -98,7 +111,9 @@ export default function App() {
     }
 
     if (needsEmailVerification(user)) {
-      await signOut(auth);
+      if (auth) {
+        await signOut(auth);
+      }
       setCurrentUser(null);
       setVibelyProfile(null);
       setAuthNotice('Please verify your email before entering Hobby App. Check your inbox and spam folder.');
@@ -143,7 +158,9 @@ export default function App() {
   }
 
   async function handleSignOut() {
-    await signOut(auth);
+    if (auth) {
+      await signOut(auth);
+    }
     setAuthMode('login');
   }
 

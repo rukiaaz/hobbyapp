@@ -23,13 +23,17 @@ const requiredFirebaseConfig = [
 
 export const isFirebaseConfigured = requiredFirebaseConfig.every(Boolean);
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
+let app = null;
+export let auth = null;
+export let db = null;
+export let googleProvider = null;
 
-export const auth = getAuth(app);
-export const db = getFirestore(app);
-
-export const googleProvider = new GoogleAuthProvider();
-googleProvider.setCustomParameters({ prompt: 'select_account' });
+if (isFirebaseConfigured) {
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+  googleProvider = new GoogleAuthProvider();
+  googleProvider.setCustomParameters({ prompt: 'select_account' });
+}
 
 export default app;
