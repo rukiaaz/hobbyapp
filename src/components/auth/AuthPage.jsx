@@ -108,7 +108,7 @@ export default function AuthPage({ initialMessage = '', mode = 'login', onComple
       }
 
       return userCredential;
-    }, 'Add your Firebase values to .env.local before logging in.');
+    }, 'Firebase is not configured. Add your keys to .env.local and restart the dev server.');
   }
 
   async function handleSignup({ email, name, password }) {
@@ -121,12 +121,12 @@ export default function AuthPage({ initialMessage = '', mode = 'login', onComple
         'Account created. We sent a verification email. Verify it first, then log in to continue.',
       );
       return null;
-    }, 'Add your Firebase values to .env.local before creating an account.');
+    }, 'Firebase is not configured. Add your keys to .env.local and restart the dev server.');
   }
 
   async function handleGoogleSignIn() {
     if (!isFirebaseConfigured) {
-      setStatusMessage('Add your Firebase values to .env.local before using Google sign-in.');
+      setStatusMessage('Firebase is not configured. Add your keys to .env.local and restart the dev server.');
       return;
     }
 

@@ -24,7 +24,7 @@ export default function App() {
   const [authNotice, setAuthNotice] = useState(() =>
     isFirebaseConfigured
       ? ''
-      : 'Add your Firebase values to .env.local (copy from .env.example) before signing in.',
+      : 'Firebase is not configured. Create .env.local in the project root with your Firebase web app keys, then restart npm run dev.',
   );
   const [profileError, setProfileError] = useState('');
   const [vibelyProfile, setVibelyProfile] = useState(null);
