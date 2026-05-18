@@ -169,7 +169,13 @@ export default function App() {
       <div className="app-shell">
         <Header activeView="loading" isAuthenticated={false} onNavigate={handleNavigate} />
         <main className="auth-loading" aria-live="polite">
-          <p>Loading Hobby App...</p>
+          <section className="auth-card" aria-label="Loading screen">
+            <div className="auth-card-header">
+              <p className="eyebrow">Hobby App</p>
+              <h2>Loading…</h2>
+            </div>
+            <p className="auth-note">Fetching your profile and live updates.</p>
+          </section>
         </main>
       </div>
     );

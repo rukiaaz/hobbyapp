@@ -34,16 +34,32 @@ src/
 - Responsive Instagram-inspired feed UI
 - Mock fallback posts for scaffold/demo content
 
-## Firebase setup
+## Clone and local setup
 
-Install dependencies with npm, then copy the example environment file:
+Friends should create their own local environment file after cloning. Real Firebase and Cloudinary values are intentionally **not** uploaded to GitHub.
 
 ```bash
+git clone https://github.com/rukiaaz/hobbyapp.git
+cd hobbyapp
 npm install
 cp .env.example .env.local
 ```
 
-Fill `.env.local` with your Firebase web app config from the Firebase Console.
+On Windows PowerShell, use this instead of `cp`:
+
+```powershell
+Copy-Item .env.example .env.local
+```
+
+Fill `.env.local` with Firebase web app config values from the Firebase Console, then start the app:
+
+```bash
+npm run dev
+```
+
+## Firebase setup
+
+Do not commit `.env.local`. The app reads Firebase values from Vite variables such as `VITE_FIREBASE_API_KEY` in `.env.local`.
 
 Enable:
 
@@ -54,12 +70,24 @@ Authentication → Templates → Email address verification → Customize if des
 Firestore Database → Create database
 ```
 
-For local development, make sure this domain is allowed:
+For local development and deployment, make sure these domains are allowed:
 
 ```txt
 Authentication → Settings → Authorized domains → localhost
 Authentication → Settings → Authorized domains → hobbyapp-topaz.vercel.app
+Authentication → Settings → Authorized domains → your-preview-or-custom-domain.com
 ```
+
+### Firebase clone troubleshooting
+
+If a friend sees a Firebase/API error after cloning, check these first:
+
+- `auth/invalid-api-key`: `.env.local` is missing, has placeholder values, or the dev server was not restarted after editing it.
+- `auth/configuration-not-found`: Firebase Authentication is not enabled for that Firebase project.
+- `auth/operation-not-allowed`: enable Email/Password and Google in **Authentication → Sign-in method**.
+- `auth/unauthorized-domain`: add the local/deployed domain in **Authentication → Settings → Authorized domains**.
+- Firestore permission errors: create Firestore and paste the rules below.
+- Cloudinary upload errors: add `VITE_CLOUDINARY_CLOUD_NAME` and `VITE_CLOUDINARY_UPLOAD_PRESET` to `.env.local`.
 
 ## Firestore rules
 

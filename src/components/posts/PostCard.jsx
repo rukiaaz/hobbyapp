@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
 import { listenToComments } from '../../services/posts.js';
 
+function getAvatarLabel(post) {
+  return post.avatar || post.creator.slice(0, 1);
+}
+
 export default function PostCard({ currentUser, onAddComment, onShare, onToggleLike, post, profile }) {
   const [commentError, setCommentError] = useState('');
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState(post.commentsPreview ?? []);
   const [isCommentsOpen, setIsCommentsOpen] = useState(false);
+  const [isSaved, setIsSaved] = useState(false);
   const [isSavingComment, setIsSavingComment] = useState(false);
 
   useEffect(() => {
@@ -53,10 +58,10 @@ export default function PostCard({ currentUser, onAddComment, onShare, onToggleL
   }
 
   return (
-    <article className="feed-card" id={`post-${post.id}`}>
+    <article className={`feed-card ${post.isLive ? 'is-live' : 'is-demo'}`} id={`post-${post.id}`}>
       <header className="feed-header">
         <div className="mini-avatar" aria-hidden="true">
-          {post.avatar || post.creator.slice(0, 1)}
+          {getAvatarLabel(post)}
         </div>
 
         <div className="feed-author">
@@ -66,48 +71,60 @@ export default function PostCard({ currentUser, onAddComment, onShare, onToggleL
           </p>
         </div>
 
+        <span className="live-pill">{post.isLive ? 'Live' : 'Inspo'}</span>
         <button className="more-button" type="button" aria-label={`More options for ${post.title}`}>
           •••
         </button>
       </header>
 
-      {post.imageUrl ? (
-        <div className="feed-photo-frame">
-          <img alt={post.title} src={post.imageUrl} />
+      <div className="feed-media">
+        {post.imageUrl ? (
+          <img alt={post.imageAlt || post.title} src={post.imageUrl} />
+        ) : (
+          <div className={`feed-art ${post.imageClass}`} role="img" aria-label={post.imageAlt || post.title} />
+        )}
+        <div className="media-scrim" aria-hidden="true" />
+        <div className="media-label-row">
           <span>{post.hobby}</span>
+          <small>{post.timeAgo}</small>
         </div>
-      ) : (
-        <div className={`feed-art ${post.imageClass}`} role="img" aria-label={post.title}>
-          <span>{post.hobby}</span>
-        </div>
-      )}
-
-      <div className="feed-actions" aria-label="Post actions">
-        <div>
-          <button
-            className={post.viewerHasLiked ? 'liked' : ''}
-            onClick={handleLikeClick}
-            type="button"
-          >
-            {post.viewerHasLiked ? '♥ Liked' : '♡ Like'}
-          </button>
-          <button onClick={() => setIsCommentsOpen((isOpen) => !isOpen)} type="button">
-            💬 Comment
-          </button>
-          <button onClick={() => onShare?.(post)} type="button">
-            ↗ Share
-          </button>
-        </div>
-        <button type="button">☆ Save</button>
       </div>
 
-      <p className="post-stats">
-        <strong>{post.likesCount} likes</strong> · {post.commentsCount} comments · {post.shareCount} shares
-      </p>
+      <div className="feed-content">
+        <div className="feed-actions" aria-label="Post actions">
+          <div>
+            <button
+              aria-pressed={post.viewerHasLiked}
+              className={post.viewerHasLiked ? 'liked' : ''}
+              onClick={handleLikeClick}
+              type="button"
+            >
+              {post.viewerHasLiked ? '♥ Liked' : '♡ Like'}
+            </button>
+            <button
+              aria-expanded={isCommentsOpen}
+              onClick={() => setIsCommentsOpen((isOpen) => !isOpen)}
+              type="button"
+            >
+              💬 Comment
+            </button>
+            <button onClick={() => onShare?.(post)} type="button">
+              ↗ Share
+            </button>
+          </div>
+          <button aria-pressed={isSaved} onClick={() => setIsSaved((saved) => !saved)} type="button">
+            {isSaved ? '★ Saved' : '☆ Save'}
+          </button>
+        </div>
 
-      <p className="feed-caption">
-        <strong>{post.title}</strong> {post.caption}
-      </p>
+        <p className="post-stats">
+          <strong>{post.likesCount} likes</strong> · {post.commentsCount} comments · {post.shareCount} shares
+        </p>
+
+        <p className="feed-caption">
+          <strong>{post.title}</strong> {post.caption}
+        </p>
+      </div>
 
       {isCommentsOpen && (
         <section className="comments-panel" aria-label={`Comments for ${post.title}`}>

@@ -68,6 +68,11 @@ export default function HomeFeed({ categories, currentUser, posts, profile }) {
   );
 
   const allPosts = useMemo(() => [...livePosts, ...mockPosts], [livePosts, mockPosts]);
+  const heroPosts = useMemo(() => allPosts.filter((post) => post.imageUrl).slice(0, 3), [allPosts]);
+  const totalEngagement = useMemo(
+    () => allPosts.reduce((total, post) => total + (post.likesCount ?? 0) + (post.commentsCount ?? 0), 0),
+    [allPosts],
+  );
 
   const activeCategory = categories.find((category) => category.id === activeCategoryId) ?? categories[0];
 
@@ -159,12 +164,28 @@ export default function HomeFeed({ categories, currentUser, posts, profile }) {
   return (
     <section className="home-feed" aria-labelledby="home-feed-title">
       <div className="feed-hero">
-        <p className="eyebrow">Home feed</p>
-        <h1 id="home-feed-title">Discover today&apos;s hobby progress</h1>
-        <p>
-          Follow makers, athletes, artists, cooks, and collectors as they share small wins,
-          experiments, and inspiration from their hobbies.
-        </p>
+        <div className="feed-hero-copy">
+          <p className="eyebrow">Home feed</p>
+          <h1 id="home-feed-title">Discover today&apos;s hobby progress</h1>
+          <p>
+            Follow makers, athletes, artists, cooks, and collectors as they share small wins,
+            experiments, and inspiration from their hobbies.
+          </p>
+          <div className="hero-metrics" aria-label="Feed activity summary">
+            <span><strong>{allPosts.length}</strong> fresh posts</span>
+            <span><strong>{totalEngagement}</strong> reactions</span>
+            <span><strong>{categories.length - 1}</strong> hobbies</span>
+          </div>
+        </div>
+
+        <div className="hero-media-stack" aria-hidden="true">
+          {heroPosts.map((post, index) => (
+            <article className="hero-photo-card" key={post.id} style={{ '--card-index': index }}>
+              <img alt="" src={post.imageUrl} />
+              <span>{post.hobby}</span>
+            </article>
+          ))}
+        </div>
       </div>
 
       <PostComposer

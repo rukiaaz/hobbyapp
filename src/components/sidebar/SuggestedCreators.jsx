@@ -9,8 +9,8 @@ export default function SuggestedCreators({ creators }) {
       <div className="creator-list">
         {creators.map((creator) => (
           <article className="creator-row" key={creator.id}>
-            <div className="mini-avatar" aria-hidden="true">
-              {creator.name.slice(0, 1)}
+            <div className="mini-avatar media-avatar" aria-hidden="true">
+              {creator.imageUrl ? <img alt="" src={creator.imageUrl} /> : creator.name.slice(0, 1)}
             </div>
             <div>
               <strong>{creator.name}</strong>

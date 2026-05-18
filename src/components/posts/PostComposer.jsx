@@ -40,10 +40,10 @@ export default function PostComposer({ categories, isSubmitting = false, onCreat
 
   return (
     <section className="post-composer" aria-labelledby="post-composer-title">
-      <div>
+      <div className="composer-intro">
         <p className="eyebrow">Create post</p>
         <h2 id="post-composer-title">Share a hobby update</h2>
-        <p>Upload a photo, choose a hobby category, and post your progress to the feed.</p>
+        <p>Drop in a photo, choose a hobby category, and publish a polished update to the feed.</p>
       </div>
 
       <form className="composer-form" onSubmit={handleSubmit}>
@@ -111,7 +111,11 @@ export default function PostComposer({ categories, isSubmitting = false, onCreat
           {imagePreview ? (
             <img alt="Selected post preview" src={imagePreview} />
           ) : (
-            <span>📷 Upload a photo</span>
+            <span className="upload-placeholder">
+              <span aria-hidden="true">📷</span>
+              <strong>Upload a photo</strong>
+              <small>Tap to choose media from your device</small>
+            </span>
           )}
         </label>
 

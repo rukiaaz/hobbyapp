@@ -49,7 +49,7 @@ export default function Header({
         {isAuthenticated ? (
           <>
             <button
-              className={activeView === 'home' ? 'active' : ''}
+              className={`nav-home ${activeView === 'home' ? 'active' : ''}`}
               disabled={activeView === 'onboarding'}
               onClick={() => navigateTo('home')}
               type="button"
@@ -59,14 +59,14 @@ export default function Header({
             <span className="user-chip" title={userLabel}>
               {activeView === 'onboarding' ? 'Create Vibely profile' : userLabel}
             </span>
-            <button onClick={onSignOut} type="button">
+            <button className="signout-button" onClick={onSignOut} type="button">
               Sign out
             </button>
           </>
         ) : (
           <>
             <button
-              className={activeView === 'login' ? 'active' : ''}
+              className={`nav-login ${activeView === 'login' ? 'active' : ''}`}
               onClick={() => navigateTo('login')}
               type="button"
             >
