@@ -1,4 +1,4 @@
-import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, setDoc } from 'firebase/firestore';
 import { db } from './firebase.js';
 
 function getInitials(name) {
@@ -18,6 +18,13 @@ function getUserProfileRef(uid) {
   return doc(db, 'users', uid);
 }
 
+function mapUserProfile(profileDocument) {
+  return {
+    id: profileDocument.id,
+    ...profileDocument.data(),
+  };
+}
+
 export async function getVibelyProfile(uid) {
   if (!uid) {
     return null;
@@ -30,6 +37,22 @@ export async function getVibelyProfile(uid) {
   }
 
   return profileSnapshot.data();
+}
+
+export function listenToUserProfiles(currentUserId, onChange, onError) {
+  const usersQuery = query(collection(db, 'users'), orderBy('displayName', 'asc'));
+
+  return onSnapshot(
+    usersQuery,
+    (snapshot) => {
+      const users = snapshot.docs
+        .map(mapUserProfile)
+        .filter((profile) => profile.uid !== currentUserId);
+
+      onChange(users);
+    },
+    onError,
+  );
 }
 
 export async function saveVibelyProfile(user, profileData) {

@@ -27,6 +27,29 @@ button {
   cursor: pointer;
 }
 
+button,
+input,
+select,
+textarea {
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease,
+    background-color 160ms ease;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(124, 58, 237, 0.28);
+  outline-offset: 2px;
+}
+
 .app-shell {
   min-height: 100vh;
 }
@@ -181,6 +204,7 @@ button {
 .suggested-card,
 .feed-card,
 .post-composer,
+.chat-card,
 .hobby-tabs,
 .feed-hero,
 .empty-state,
@@ -661,6 +685,7 @@ button {
 
 .feed-card,
 .post-composer,
+.chat-card,
 .suggested-card,
 .empty-state {
   padding: 1rem;
@@ -903,6 +928,149 @@ button {
   color: #756a62;
 }
 
+.empty-state.compact {
+  box-shadow: none;
+}
+
+.chat-card {
+  display: grid;
+  gap: 1rem;
+}
+
+.chat-card .section-heading span {
+  display: block;
+  margin-top: 0.2rem;
+  color: #756a62;
+  font-size: 0.86rem;
+}
+
+.chat-user-list {
+  display: grid;
+  gap: 0.55rem;
+  max-height: 240px;
+  overflow: auto;
+  padding-right: 0.2rem;
+}
+
+.chat-user-list button {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.65rem;
+  align-items: center;
+  border: 1px solid rgba(66, 44, 31, 0.1);
+  border-radius: 1rem;
+  padding: 0.7rem;
+  color: #231f20;
+  background: #fff;
+  text-align: left;
+}
+
+.chat-user-list button.active {
+  border-color: rgba(124, 58, 237, 0.32);
+  background: #f4efff;
+}
+
+.chat-user-list small {
+  display: block;
+  overflow: hidden;
+  margin-top: 0.15rem;
+  color: #756a62;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-window {
+  overflow: hidden;
+  border: 1px solid rgba(66, 44, 31, 0.1);
+  border-radius: 1.25rem;
+  background: #fff7ef;
+}
+
+.chat-window-header {
+  display: flex;
+  gap: 0.7rem;
+  align-items: center;
+  border-bottom: 1px solid rgba(66, 44, 31, 0.1);
+  padding: 0.8rem;
+  background: #fff;
+}
+
+.chat-window-header p {
+  margin: 0.15rem 0 0;
+  color: #756a62;
+  font-size: 0.86rem;
+}
+
+.message-list {
+  display: grid;
+  gap: 0.55rem;
+  max-height: 330px;
+  overflow: auto;
+  padding: 0.8rem;
+}
+
+.message-bubble {
+  justify-self: start;
+  max-width: 86%;
+  border-radius: 1rem 1rem 1rem 0.3rem;
+  padding: 0.7rem 0.8rem;
+  background: #fff;
+  box-shadow: 0 8px 18px rgba(48, 35, 28, 0.06);
+}
+
+.message-bubble.own {
+  justify-self: end;
+  border-radius: 1rem 1rem 0.3rem 1rem;
+  color: #fff;
+  background: #231f20;
+}
+
+.message-bubble p {
+  margin: 0;
+  line-height: 1.4;
+}
+
+.message-bubble span {
+  display: block;
+  margin-top: 0.3rem;
+  color: #756a62;
+  font-size: 0.72rem;
+}
+
+.message-bubble.own span {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.chat-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  border-top: 1px solid rgba(66, 44, 31, 0.1);
+  padding: 0.75rem;
+  background: #fff;
+}
+
+.chat-form input {
+  width: 100%;
+  border: 1px solid rgba(66, 44, 31, 0.12);
+  border-radius: 999px;
+  padding: 0.75rem 1rem;
+  background: #fff;
+}
+
+.chat-form button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.75rem 1rem;
+  color: #fff;
+  background: #231f20;
+}
+
+.chat-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
 .bottom-nav {
   position: fixed;
   right: 1rem;
@@ -1084,10 +1252,6 @@ button {
     flex-direction: column;
   }
 
-  .side-column {
-    display: none;
-  }
-
   .bottom-nav {
     display: grid;
   }
@@ -1101,6 +1265,7 @@ button {
 
   .feed-card,
   .post-composer,
+  .chat-card,
   .suggested-card,
   .profile-body,
   .empty-state {

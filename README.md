@@ -1,13 +1,14 @@
 # Hobby App Frontend
 
-React + Vite scaffold for a hobby-focused social media app inspired by Instagram. This is a frontend starting point only, not a finished product.
+React + Vite scaffold for a hobby-focused social media app inspired by Instagram. This is a frontend starting point, now wired to Firebase Auth, Firestore, and Cloudinary uploads.
 
 ## Structure
 
 ```txt
 src/
   components/
-    auth/          Login and sign up scaffold screens
+    auth/          Login and sign up screens
+    chat/          User-to-user messaging UI
     feed/          Home feed composition and filtering
     hobbies/       Hobby filters and discovery components
     layout/        App shell navigation components
@@ -15,38 +16,23 @@ src/
     posts/         Feed cards, post composer, and post grid components
     profile/       Profile summary components
     sidebar/       Secondary creator recommendation components
-  data/            Mock profile, post, category, and creator data
+  data/            Mock fallback profile, post, category, and creator data
   services/        Firebase Auth/Firestore and Cloudinary upload setup
   App.jsx          Page composition
   main.jsx         React entry point
   styles.css       Global responsive styles and placeholder post art
 ```
 
-## Components
+## Features
 
-- `Header` — top navigation, search, signed-in user state, and sign out
-- `AuthPage` — responsive login/sign up screen shell with Email/Password and Google sign-in
-- `LoginForm` — Firebase Email/Password login form
-- `SignupForm` — Firebase Email/Password account creation form
-- `VibelyOnboarding` — post-login profile setup asking display name, username, hobby, and bio
-- `HomeFeed` — main home screen feed with client-side hobby filtering
-- `ProfileHeader` — user profile, bio, stats, and edit profile placeholder
-- `PostGrid` — responsive mock user post grid for profile/discovery previews
-- `PostComposer` — authenticated post creation form with Cloudinary image upload
-- `PostCard` — feed-style hobby post card with like, comment, and share actions
-- `BottomNav` — mobile navigation placeholder
-- `HobbyTabs` — clickable hobby category filters
-- `SuggestedCreators` — sample creator recommendations
-
-## Current scaffold behavior
-
-- Login/sign up is the first screen until the user is authenticated.
-- After sign-in, users create a Vibely account/profile before the feed is unlocked.
-- Signed-in users can create posts, upload photos, like posts, comment, and share.
-- Hobby tabs filter live Firestore posts and mock posts by category.
-- Uploaded photos are stored in Cloudinary, while post metadata is stored in Firestore.
-- Posts without uploaded photos use CSS gradient placeholders.
-- Vibely profile data is saved to Firestore under `users/{firebaseUserId}`.
+- Firebase Email/Password and Google authentication
+- Post-login Vibely profile creation
+- Firestore-backed user profiles
+- Firestore-backed posts, likes, comments, and shares
+- Cloudinary-backed post photo uploads
+- User-to-user Firestore chat messages
+- Responsive Instagram-inspired feed UI
+- Mock fallback posts for scaffold/demo content
 
 ## Firebase setup
 
@@ -59,7 +45,7 @@ cp .env.example .env.local
 
 Fill `.env.local` with your Firebase web app config from the Firebase Console.
 
-In Firebase Console, enable these providers and services:
+Enable:
 
 ```txt
 Authentication → Sign-in method → Email/Password → Enable
@@ -73,7 +59,9 @@ For local development, make sure this domain is allowed:
 Authentication → Settings → Authorized domains → localhost
 ```
 
-Create Firestore Database, then publish rules like this:
+## Firestore rules
+
+Paste this in **Firestore Database → Rules**:
 
 ```js
 rules_version = '2';
@@ -109,6 +97,26 @@ service cloud.firestore {
           && request.resource.data.authorId == request.auth.uid;
         allow update, delete: if request.auth != null
           && resource.data.authorId == request.auth.uid;
+      }
+    }
+
+    match /chats/{chatId} {
+      allow read: if request.auth != null
+        && request.auth.uid in resource.data.participants;
+      allow create: if request.auth != null
+        && request.auth.uid in request.resource.data.participants
+        && request.resource.data.participants.size() == 2;
+      allow update: if request.auth != null
+        && request.auth.uid in resource.data.participants;
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if request.auth != null
+          && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow create: if request.auth != null
+          && request.resource.data.senderId == request.auth.uid
+          && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+        allow update, delete: if false;
       }
     }
   }

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth';
 import { hobbyCategories, posts, suggestedCreators, userProfile } from './data/mockData.js';
 import AuthPage from './components/auth/AuthPage.jsx';
+import ChatPanel from './components/chat/ChatPanel.jsx';
 import HomeFeed from './components/feed/HomeFeed.jsx';
 import BottomNav from './components/layout/BottomNav.jsx';
 import Header from './components/layout/Header.jsx';
@@ -149,7 +150,8 @@ export default function App() {
             </section>
           </section>
 
-          <aside className="side-column" aria-label="Suggested creators">
+          <aside className="side-column" aria-label="Community sidebar">
+            <ChatPanel currentUser={currentUser} profile={vibelyProfile} />
             <SuggestedCreators creators={suggestedCreators} />
           </aside>
         </main>
