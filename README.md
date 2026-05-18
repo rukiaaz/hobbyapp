@@ -57,6 +57,7 @@ For local development, make sure this domain is allowed:
 
 ```txt
 Authentication → Settings → Authorized domains → localhost
+Authentication → Settings → Authorized domains → hobbyapp-topaz.vercel.app
 ```
 
 ## Firestore rules
