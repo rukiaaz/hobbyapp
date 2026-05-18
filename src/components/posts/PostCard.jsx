@@ -1,9 +1,62 @@
-export default function PostCard({ post }) {
+import { useEffect, useState } from 'react';
+import { listenToComments } from '../../services/posts.js';
+
+export default function PostCard({ currentUser, onAddComment, onShare, onToggleLike, post, profile }) {
+  const [commentError, setCommentError] = useState('');
+  const [commentText, setCommentText] = useState('');
+  const [comments, setComments] = useState(post.commentsPreview ?? []);
+  const [isCommentsOpen, setIsCommentsOpen] = useState(false);
+  const [isSavingComment, setIsSavingComment] = useState(false);
+
+  useEffect(() => {
+    if (!isCommentsOpen || !post.isLive) {
+      setComments(post.commentsPreview ?? []);
+      return undefined;
+    }
+
+    const unsubscribe = listenToComments(
+      post.id,
+      setComments,
+      (error) => setCommentError(`Could not load comments. (${error.code ?? 'unknown-error'})`),
+    );
+
+    return unsubscribe;
+  }, [isCommentsOpen, post.commentsPreview, post.id, post.isLive]);
+
+  async function handleCommentSubmit(event) {
+    event.preventDefault();
+
+    if (!commentText.trim()) {
+      return;
+    }
+
+    setIsSavingComment(true);
+    setCommentError('');
+
+    try {
+      await onAddComment?.(post, commentText);
+      setCommentText('');
+      setIsCommentsOpen(true);
+    } catch (error) {
+      setCommentError(`Could not add comment. (${error.code ?? 'unknown-error'})`);
+    } finally {
+      setIsSavingComment(false);
+    }
+  }
+
+  async function handleLikeClick() {
+    try {
+      await onToggleLike?.(post);
+    } catch (error) {
+      setCommentError(`Could not update like. (${error.code ?? 'unknown-error'})`);
+    }
+  }
+
   return (
-    <article className="feed-card">
+    <article className="feed-card" id={`post-${post.id}`}>
       <header className="feed-header">
         <div className="mini-avatar" aria-hidden="true">
-          {post.creator.slice(0, 1)}
+          {post.avatar || post.creator.slice(0, 1)}
         </div>
 
         <div className="feed-author">
@@ -18,26 +71,84 @@ export default function PostCard({ post }) {
         </button>
       </header>
 
-      <div className={`feed-art ${post.imageClass}`} role="img" aria-label={post.title}>
-        <span>{post.hobby}</span>
-      </div>
+      {post.imageUrl ? (
+        <div className="feed-photo-frame">
+          <img alt={post.title} src={post.imageUrl} />
+          <span>{post.hobby}</span>
+        </div>
+      ) : (
+        <div className={`feed-art ${post.imageClass}`} role="img" aria-label={post.title}>
+          <span>{post.hobby}</span>
+        </div>
+      )}
 
       <div className="feed-actions" aria-label="Post actions">
         <div>
-          <button type="button">♡ Like</button>
-          <button type="button">💬 Comment</button>
-          <button type="button">↗ Share</button>
+          <button
+            className={post.viewerHasLiked ? 'liked' : ''}
+            onClick={handleLikeClick}
+            type="button"
+          >
+            {post.viewerHasLiked ? '♥ Liked' : '♡ Like'}
+          </button>
+          <button onClick={() => setIsCommentsOpen((isOpen) => !isOpen)} type="button">
+            💬 Comment
+          </button>
+          <button onClick={() => onShare?.(post)} type="button">
+            ↗ Share
+          </button>
         </div>
         <button type="button">☆ Save</button>
       </div>
 
       <p className="post-stats">
-        <strong>{post.likes} likes</strong> · {post.comments} comments
+        <strong>{post.likesCount} likes</strong> · {post.commentsCount} comments · {post.shareCount} shares
       </p>
 
       <p className="feed-caption">
         <strong>{post.title}</strong> {post.caption}
       </p>
+
+      {isCommentsOpen && (
+        <section className="comments-panel" aria-label={`Comments for ${post.title}`}>
+          <form className="comment-form" onSubmit={handleCommentSubmit}>
+            <div className="mini-avatar" aria-hidden="true">
+              {profile?.avatar || currentUser?.email?.slice(0, 1).toUpperCase()}
+            </div>
+            <input
+              aria-label="Write a comment"
+              onChange={(event) => setCommentText(event.target.value)}
+              placeholder="Add a supportive comment..."
+              value={commentText}
+            />
+            <button disabled={isSavingComment} type="submit">
+              Post
+            </button>
+          </form>
+
+          {commentError && <p className="auth-message">{commentError}</p>}
+
+          <div className="comment-list">
+            {comments.length > 0 ? (
+              comments.map((comment) => (
+                <article className="comment-row" key={comment.id}>
+                  <div className="mini-avatar" aria-hidden="true">
+                    {comment.avatar || comment.creator.slice(0, 1)}
+                  </div>
+                  <div>
+                    <p>
+                      <strong>{comment.creator}</strong> {comment.text}
+                    </p>
+                    <span>{comment.handle} · {comment.timeAgo}</span>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <p className="empty-comments">No comments yet. Be the first to cheer them on.</p>
+            )}
+          </div>
+        </section>
+      )}
     </article>
   );
 }

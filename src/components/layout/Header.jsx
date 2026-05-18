@@ -1,9 +1,13 @@
-function getUserLabel(user) {
+function getUserLabel(user, vibelyProfile) {
+  if (vibelyProfile) {
+    return vibelyProfile.handle;
+  }
+
   if (!user) {
     return '';
   }
 
-  return user.displayName || user.email || 'Signed in';
+  return user.displayName || user.email || 'Setting up profile';
 }
 
 export default function Header({
@@ -12,8 +16,9 @@ export default function Header({
   isAuthenticated = false,
   onNavigate,
   onSignOut,
+  vibelyProfile,
 }) {
-  const userLabel = getUserLabel(currentUser);
+  const userLabel = getUserLabel(currentUser, vibelyProfile);
 
   function navigateTo(view) {
     onNavigate?.(view);
@@ -34,7 +39,7 @@ export default function Header({
       {isAuthenticated ? (
         <label className="search-box">
           <span className="sr-only">Search hobbies, makers, or posts</span>
-          <input type="search" placeholder="Search hobbies" />
+          <input disabled={activeView === 'onboarding'} type="search" placeholder="Search hobbies" />
         </label>
       ) : (
         <p className="header-helper">Sign in to unlock your hobby feed.</p>
@@ -45,13 +50,14 @@ export default function Header({
           <>
             <button
               className={activeView === 'home' ? 'active' : ''}
+              disabled={activeView === 'onboarding'}
               onClick={() => navigateTo('home')}
               type="button"
             >
               Home
             </button>
             <span className="user-chip" title={userLabel}>
-              {userLabel}
+              {activeView === 'onboarding' ? 'Create Vibely profile' : userLabel}
             </span>
             <button onClick={onSignOut} type="button">
               Sign out

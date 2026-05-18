@@ -1,29 +1,67 @@
 import { useEffect, useState } from 'react';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth';
 import { hobbyCategories, posts, suggestedCreators, userProfile } from './data/mockData.js';
 import AuthPage from './components/auth/AuthPage.jsx';
 import HomeFeed from './components/feed/HomeFeed.jsx';
 import BottomNav from './components/layout/BottomNav.jsx';
 import Header from './components/layout/Header.jsx';
+import VibelyOnboarding from './components/onboarding/VibelyOnboarding.jsx';
 import PostGrid from './components/posts/PostGrid.jsx';
 import ProfileHeader from './components/profile/ProfileHeader.jsx';
 import SuggestedCreators from './components/sidebar/SuggestedCreators.jsx';
 import { auth } from './services/firebase.js';
+import { getVibelyProfile, saveVibelyProfile, toAppProfile } from './services/vibelyProfile.js';
 
 export default function App() {
   const [authMode, setAuthMode] = useState('login');
   const [currentUser, setCurrentUser] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [profileError, setProfileError] = useState('');
+  const [vibelyProfile, setVibelyProfile] = useState(null);
+
   const isSignedIn = Boolean(currentUser);
-  const activeView = isSignedIn ? 'home' : authMode;
+  const needsVibelyProfile = isSignedIn && !vibelyProfile;
+  const activeView = isSignedIn ? (needsVibelyProfile ? 'onboarding' : 'home') : authMode;
+  const profilePreview = toAppProfile(vibelyProfile, userProfile);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    let isMounted = true;
+
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      setIsAuthReady(false);
       setCurrentUser(user);
-      setIsAuthReady(true);
+      setProfileError('');
+
+      if (!user) {
+        setVibelyProfile(null);
+        setIsAuthReady(true);
+        return;
+      }
+
+      try {
+        const savedProfile = await getVibelyProfile(user.uid);
+
+        if (isMounted) {
+          setVibelyProfile(savedProfile);
+        }
+      } catch (error) {
+        if (isMounted) {
+          setVibelyProfile(null);
+          setProfileError(
+            `Could not load your Vibely profile from Firestore. Check your Firestore rules. (${error.code ?? 'unknown-error'})`,
+          );
+        }
+      } finally {
+        if (isMounted) {
+          setIsAuthReady(true);
+        }
+      }
     });
 
-    return unsubscribe;
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, []);
 
   function handleNavigate(view) {
@@ -36,6 +74,24 @@ export default function App() {
     }
 
     setAuthMode(view);
+  }
+
+  async function handleCreateVibelyProfile(profileData) {
+    setProfileError('');
+
+    try {
+      const savedProfile = await saveVibelyProfile(currentUser, profileData);
+
+      if (currentUser.displayName !== savedProfile.displayName) {
+        await updateProfile(currentUser, { displayName: savedProfile.displayName });
+      }
+
+      setVibelyProfile(savedProfile);
+    } catch (error) {
+      setProfileError(
+        `Could not create your Vibely profile in Firestore. Check your Firestore rules. (${error.code ?? 'unknown-error'})`,
+      );
+    }
   }
 
   async function handleSignOut() {
@@ -62,12 +118,25 @@ export default function App() {
         isAuthenticated={isSignedIn}
         onNavigate={handleNavigate}
         onSignOut={handleSignOut}
+        vibelyProfile={vibelyProfile}
       />
 
-      {isSignedIn ? (
+      {needsVibelyProfile ? (
+        <VibelyOnboarding
+          errorMessage={profileError}
+          onComplete={handleCreateVibelyProfile}
+          onSignOut={handleSignOut}
+          user={currentUser}
+        />
+      ) : isSignedIn ? (
         <main className="layout">
           <section className="main-column" aria-label="Home screen">
-            <HomeFeed categories={hobbyCategories} posts={posts} />
+            <HomeFeed
+              categories={hobbyCategories}
+              currentUser={currentUser}
+              posts={posts}
+              profile={vibelyProfile}
+            />
 
             <section className="profile-preview" aria-labelledby="profile-preview-title">
               <div className="section-heading">
@@ -75,7 +144,7 @@ export default function App() {
                 <button type="button">View profile</button>
               </div>
 
-              <ProfileHeader profile={userProfile} />
+              <ProfileHeader profile={profilePreview} />
               <PostGrid posts={posts.slice(0, 6)} />
             </section>
           </section>
@@ -92,7 +161,7 @@ export default function App() {
         />
       )}
 
-      {isSignedIn && <BottomNav activeItem="Home" onNavigate={handleNavigate} />}
+      {isSignedIn && !needsVibelyProfile && <BottomNav activeItem="Home" onNavigate={handleNavigate} />}
     </div>
   );
 }

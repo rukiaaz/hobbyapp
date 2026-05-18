@@ -18,7 +18,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -153,7 +154,8 @@ button {
   align-content: start;
 }
 
-.auth-layout {
+.auth-layout,
+.onboarding-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(360px, 480px);
   gap: 1.5rem;
@@ -178,11 +180,14 @@ button {
 .profile-card,
 .suggested-card,
 .feed-card,
+.post-composer,
 .hobby-tabs,
 .feed-hero,
 .empty-state,
 .auth-hero-panel,
-.auth-card {
+.auth-card,
+.onboarding-hero,
+.onboarding-card {
   overflow: hidden;
   border: 1px solid rgba(66, 44, 31, 0.1);
   border-radius: 1.5rem;
@@ -217,7 +222,8 @@ button {
   color: rgba(255, 255, 255, 0.76);
 }
 
-.auth-hero-panel {
+.auth-hero-panel,
+.onboarding-hero {
   display: grid;
   gap: 1.25rem;
   align-content: center;
@@ -229,7 +235,8 @@ button {
     linear-gradient(145deg, #231f20, #7c3aed 48%, #ff6b6b);
 }
 
-.auth-hero-panel h1 {
+.auth-hero-panel h1,
+.onboarding-hero h1 {
   max-width: 11ch;
   margin: 0;
   font-size: clamp(2.35rem, 7vw, 5.25rem);
@@ -237,7 +244,8 @@ button {
   letter-spacing: -0.07em;
 }
 
-.auth-hero-panel > p:not(.eyebrow) {
+.auth-hero-panel > p:not(.eyebrow),
+.onboarding-hero > p:not(.eyebrow) {
   max-width: 54ch;
   margin: 0;
   color: rgba(255, 255, 255, 0.82);
@@ -277,7 +285,8 @@ button {
   color: rgba(255, 255, 255, 0.76);
 }
 
-.auth-card {
+.auth-card,
+.onboarding-card {
   display: grid;
   gap: 1.1rem;
   align-content: center;
@@ -367,7 +376,8 @@ button {
   background: rgba(66, 44, 31, 0.12);
 }
 
-.auth-form {
+.auth-form,
+.onboarding-form {
   display: grid;
   gap: 0.9rem;
 }
@@ -386,13 +396,23 @@ button {
 }
 
 .auth-field input,
-.auth-field select {
+.auth-field select,
+.auth-field textarea {
   width: 100%;
   border: 1px solid rgba(66, 44, 31, 0.14);
   border-radius: 1rem;
   padding: 0.85rem 1rem;
   color: #231f20;
   background: #fff;
+}
+
+.auth-field textarea {
+  resize: vertical;
+}
+
+.auth-field small {
+  color: #756a62;
+  font-weight: 600;
 }
 
 .auth-row,
@@ -425,9 +445,15 @@ button {
   box-shadow: 0 12px 28px rgba(48, 35, 28, 0.12);
 }
 
-.auth-submit:disabled {
+.auth-submit:disabled,
+.nav-actions button:disabled,
+.search-box input:disabled {
   cursor: not-allowed;
   opacity: 0.7;
+}
+
+.onboarding-signout {
+  justify-self: center;
 }
 
 .text-button {
@@ -634,6 +660,7 @@ button {
 }
 
 .feed-card,
+.post-composer,
 .suggested-card,
 .empty-state {
   padding: 1rem;
@@ -669,7 +696,63 @@ button {
   font-size: 0.9rem;
 }
 
-.feed-art {
+.post-composer {
+  display: grid;
+  gap: 1rem;
+}
+
+.post-composer h2 {
+  margin: 0;
+  font-size: clamp(1.35rem, 3vw, 2rem);
+  letter-spacing: -0.04em;
+}
+
+.post-composer p:not(.eyebrow) {
+  margin: 0.45rem 0 0;
+  color: #756a62;
+  line-height: 1.55;
+}
+
+.composer-form {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.composer-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.upload-dropzone {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  min-height: 230px;
+  place-items: center;
+  border: 2px dashed rgba(66, 44, 31, 0.18);
+  border-radius: 1.25rem;
+  color: #756a62;
+  background: #fff7ef;
+  font-weight: 850;
+}
+
+.upload-dropzone input {
+  position: absolute;
+  inset: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.upload-dropzone img {
+  width: 100%;
+  height: 100%;
+  max-height: 360px;
+  object-fit: cover;
+}
+
+.feed-art,
+.feed-photo-frame {
   display: flex;
   align-items: flex-end;
   min-height: 430px;
@@ -678,7 +761,25 @@ button {
   padding: 1rem;
 }
 
-.feed-art span {
+.feed-photo-frame {
+  position: relative;
+  overflow: hidden;
+  padding: 0;
+  background: #f5ece3;
+}
+
+.feed-photo-frame img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.feed-art span,
+.feed-photo-frame span {
+  position: relative;
+  z-index: 1;
   border-radius: 999px;
   padding: 0.45rem 0.75rem;
   color: #fff;
@@ -697,6 +798,70 @@ button {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.feed-actions button.liked {
+  color: #fff;
+  background: #e11d48;
+}
+
+.comments-panel {
+  display: grid;
+  gap: 0.85rem;
+  border-top: 1px solid rgba(66, 44, 31, 0.1);
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.comment-form {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.comment-form input {
+  width: 100%;
+  border: 1px solid rgba(66, 44, 31, 0.12);
+  border-radius: 999px;
+  padding: 0.75rem 1rem;
+  background: #fff;
+}
+
+.comment-form button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.75rem 1rem;
+  color: #fff;
+  background: #231f20;
+}
+
+.comment-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.comment-list {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.comment-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.65rem;
+}
+
+.comment-row p,
+.empty-comments {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.comment-row span,
+.empty-comments {
+  color: #756a62;
+  font-size: 0.88rem;
 }
 
 .post-stats,
@@ -814,6 +979,10 @@ button {
   background: linear-gradient(135deg, #0f172a, #2563eb, #7dd3fc);
 }
 
+.gradient-userpost {
+  background: linear-gradient(135deg, #7c3aed, #ec4899, #f97316);
+}
+
 .sr-only {
   position: absolute;
   overflow: hidden;
@@ -828,11 +997,13 @@ button {
 
 @media (max-width: 980px) {
   .layout,
-  .auth-layout {
+  .auth-layout,
+  .onboarding-layout {
     grid-template-columns: minmax(0, 720px);
   }
 
-  .auth-hero-panel {
+  .auth-hero-panel,
+  .onboarding-hero {
     min-height: auto;
   }
 
@@ -859,12 +1030,14 @@ button {
   }
 
   .layout,
-  .auth-layout {
+  .auth-layout,
+  .onboarding-layout {
     width: min(100% - 1rem, 680px);
     margin-bottom: 6rem;
   }
 
-  .auth-layout {
+  .auth-layout,
+  .onboarding-layout {
     margin-bottom: 1.5rem;
   }
 
@@ -886,12 +1059,23 @@ button {
     flex-direction: column;
   }
 
-  .feed-art {
+  .comment-form {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .comment-form button {
+    grid-column: 2;
+    justify-self: end;
+  }
+
+  .feed-art,
+  .feed-photo-frame {
     min-height: 320px;
   }
 
   .auth-form-grid,
-  .auth-row {
+  .auth-row,
+  .composer-grid {
     grid-template-columns: 1fr;
   }
 
@@ -916,6 +1100,7 @@ button {
   }
 
   .feed-card,
+  .post-composer,
   .suggested-card,
   .profile-body,
   .empty-state {
