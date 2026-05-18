@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
+  sendEmailVerification,
   signInWithEmailAndPassword,
   signInWithPopup,
+  signOut,
   updateProfile,
 } from 'firebase/auth';
 import { auth, googleProvider, isFirebaseConfigured } from '../../services/firebase.js';
@@ -40,18 +42,28 @@ function getFriendlyAuthError(error) {
   return `${messages[error.code] ?? fallback} (${error.code})`;
 }
 
-export default function AuthPage({ mode = 'login', onComplete, onModeChange }) {
+function needsEmailVerification(user) {
+  return user?.providerData.some((provider) => provider.providerId === 'password') && !user.emailVerified;
+}
+
+export default function AuthPage({ initialMessage = '', mode = 'login', onComplete, onModeChange }) {
   const [isLoading, setIsLoading] = useState(false);
-  const [statusMessage, setStatusMessage] = useState('');
+  const [statusMessage, setStatusMessage] = useState(initialMessage);
   const isSignup = mode === 'signup';
   const title = isSignup ? 'Create your Hobby App account' : 'Welcome back to Hobby App';
   const subtitle = isSignup
-    ? 'Start following hobby communities and sharing your progress.'
+    ? 'Use a real email. We will send a verification link before you can enter the app.'
     : 'Log in to return to your hobbies, creators, and saved inspiration.';
 
   useEffect(() => {
-    setStatusMessage('');
-  }, [mode]);
+    setStatusMessage(initialMessage);
+  }, [initialMessage]);
+
+  useEffect(() => {
+    if (!initialMessage) {
+      setStatusMessage('');
+    }
+  }, [initialMessage, mode]);
 
   async function runAuthAction(action, missingConfigMessage) {
     if (!isFirebaseConfigured) {
@@ -64,7 +76,10 @@ export default function AuthPage({ mode = 'login', onComplete, onModeChange }) {
 
     try {
       const result = await action();
-      onComplete?.(result?.user);
+
+      if (result?.user) {
+        onComplete?.(result.user);
+      }
     } catch (error) {
       setStatusMessage(getFriendlyAuthError(error));
     } finally {
@@ -73,17 +88,39 @@ export default function AuthPage({ mode = 'login', onComplete, onModeChange }) {
   }
 
   async function handleLogin({ email, password }) {
-    await runAuthAction(
-      () => signInWithEmailAndPassword(auth, email, password),
-      'Add your Firebase values to .env.local before logging in.',
-    );
+    await runAuthAction(async () => {
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+
+      if (needsEmailVerification(userCredential.user)) {
+        try {
+          await sendEmailVerification(userCredential.user);
+        } catch (error) {
+          if (error.code !== 'auth/too-many-requests') {
+            throw error;
+          }
+        }
+
+        await signOut(auth);
+        setStatusMessage(
+          'Please verify your email before entering Hobby App. We sent a verification link to your inbox. Check spam too.',
+        );
+        return null;
+      }
+
+      return userCredential;
+    }, 'Add your Firebase values to .env.local before logging in.');
   }
 
   async function handleSignup({ email, name, password }) {
     await runAuthAction(async () => {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       await updateProfile(userCredential.user, { displayName: name });
-      return userCredential;
+      await sendEmailVerification(userCredential.user);
+      await signOut(auth);
+      setStatusMessage(
+        'Account created. We sent a verification email. Verify it first, then log in to continue.',
+      );
+      return null;
     }, 'Add your Firebase values to .env.local before creating an account.');
   }
 
@@ -171,7 +208,7 @@ export default function AuthPage({ mode = 'login', onComplete, onModeChange }) {
         </button>
 
         <div className="auth-divider">
-          <span>or use email and password</span>
+          <span>or use verified email and password</span>
         </div>
 
         {isSignup ? (

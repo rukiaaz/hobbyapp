@@ -25,7 +25,7 @@ src/
 
 ## Features
 
-- Firebase Email/Password and Google authentication
+- Firebase Email/Password authentication with required email verification, plus Google authentication
 - Post-login Vibely profile creation
 - Firestore-backed user profiles
 - Firestore-backed posts, likes, comments, and shares
@@ -50,6 +50,7 @@ Enable:
 ```txt
 Authentication → Sign-in method → Email/Password → Enable
 Authentication → Sign-in method → Google → Enable
+Authentication → Templates → Email address verification → Customize if desired
 Firestore Database → Create database
 ```
 

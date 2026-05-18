@@ -83,7 +83,7 @@ export default function SignupForm({ isLoading = false, onSubmit, onSwitchMode, 
 
       {statusMessage && <p className="auth-message">{statusMessage}</p>}
 
-      <p className="auth-note">This creates a Firebase email/password user after env setup.</p>
+      <p className="auth-note">Use a real email. We send a verification link before unlocking the app.</p>
 
       <p className="auth-switch-copy">
         Already have an account?{' '}

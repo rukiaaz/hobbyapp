@@ -50,7 +50,7 @@ export default function LoginForm({ isLoading = false, onSubmit, onSwitchMode, s
 
       {statusMessage && <p className="auth-message">{statusMessage}</p>}
 
-      <p className="auth-note">Firebase Auth is wired for email/password once your env values are set.</p>
+      <p className="auth-note">Email/password users must verify their email before entering the app.</p>
 
       <p className="auth-switch-copy">
         New to Hobby App?{' '}

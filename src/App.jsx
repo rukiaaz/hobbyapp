@@ -13,10 +13,15 @@ import SuggestedCreators from './components/sidebar/SuggestedCreators.jsx';
 import { auth } from './services/firebase.js';
 import { getVibelyProfile, saveVibelyProfile, toAppProfile } from './services/vibelyProfile.js';
 
+function needsEmailVerification(user) {
+  return user?.providerData.some((provider) => provider.providerId === 'password') && !user.emailVerified;
+}
+
 export default function App() {
   const [authMode, setAuthMode] = useState('login');
   const [currentUser, setCurrentUser] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [authNotice, setAuthNotice] = useState('');
   const [profileError, setProfileError] = useState('');
   const [vibelyProfile, setVibelyProfile] = useState(null);
 
@@ -35,6 +40,15 @@ export default function App() {
 
       if (!user) {
         setVibelyProfile(null);
+        setIsAuthReady(true);
+        return;
+      }
+
+      if (needsEmailVerification(user)) {
+        await signOut(auth);
+        setCurrentUser(null);
+        setVibelyProfile(null);
+        setAuthNotice('Please verify your email before entering Hobby App. Check your inbox and spam folder.');
         setIsAuthReady(true);
         return;
       }
@@ -83,6 +97,16 @@ export default function App() {
       return;
     }
 
+    if (needsEmailVerification(user)) {
+      await signOut(auth);
+      setCurrentUser(null);
+      setVibelyProfile(null);
+      setAuthNotice('Please verify your email before entering Hobby App. Check your inbox and spam folder.');
+      setAuthMode('login');
+      return;
+    }
+
+    setAuthNotice('');
     setCurrentUser(user);
     setIsAuthReady(false);
     setProfileError('');
@@ -180,6 +204,7 @@ export default function App() {
         </main>
       ) : (
         <AuthPage
+          initialMessage={authNotice}
           mode={authMode}
           onComplete={handleAuthComplete}
           onModeChange={setAuthMode}
