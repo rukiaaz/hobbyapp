@@ -9,6 +9,14 @@ build/
 .env
 .env.local
 .env.*.local
+!.env.example
+
+# Firebase local/cache/debug files
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+database-debug.log*
+ui-debug.log*
 
 # Logs
 logs/
@@ -24,6 +32,10 @@ pnpm-debug.log*
 
 # Test coverage
 coverage/
+
+# Deployment provider folders
+.vercel/
+.netlify/
 
 # Editor and OS files
 .vscode/

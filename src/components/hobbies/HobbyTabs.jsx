@@ -1,12 +1,22 @@
-export default function HobbyTabs({ categories }) {
+export default function HobbyTabs({ categories, activeCategoryId = 'all', onCategoryChange }) {
   return (
-    <section className="hobby-tabs" aria-label="Hobby categories">
-      {categories.map((category, index) => (
-        <button className={index === 0 ? 'active' : ''} key={category.id} type="button">
-          <span aria-hidden="true">{category.icon}</span>
-          {category.label}
-        </button>
-      ))}
+    <section className="hobby-tabs" aria-label="Filter posts by hobby category">
+      {categories.map((category) => {
+        const isActive = category.id === activeCategoryId;
+
+        return (
+          <button
+            aria-pressed={isActive}
+            className={isActive ? 'active' : ''}
+            key={category.id}
+            onClick={() => onCategoryChange?.(category.id)}
+            type="button"
+          >
+            <span aria-hidden="true">{category.icon}</span>
+            {category.label}
+          </button>
+        );
+      })}
     </section>
   );
 }
