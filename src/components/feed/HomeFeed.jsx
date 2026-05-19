@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import LoadingSkeleton from '../common/LoadingSkeleton.jsx';
 import HobbyTabs from '../hobbies/HobbyTabs.jsx';
 import PostCard from '../posts/PostCard.jsx';
 import PostComposer from '../posts/PostComposer.jsx';
@@ -18,6 +19,7 @@ function toMockFeedPost(post, interaction) {
     commentsCount: post.comments + (interaction?.comments?.length ?? 0),
     shareCount: interaction?.shareCount ?? 0,
     viewerHasLiked: interaction?.viewerHasLiked ?? false,
+    viewerHasSaved: interaction?.viewerHasSaved ?? false,
     commentsPreview: interaction?.comments ?? [],
   };
 }
@@ -42,21 +44,38 @@ export default function HomeFeed({
   categories,
   currentUser,
   feedError = '',
+  followingIds = new Set(),
   isCreatingPost = false,
+  isLoading = false,
   livePosts = [],
   onCreatePost,
+  onDeleteComment,
+  onDeletePost,
+  onReport,
+  onToggleSave,
+  onUpdatePost,
+  onViewProfile,
   posts,
   profile,
+  savedPostIds = new Set(),
 }) {
   const [activeCategoryId, setActiveCategoryId] = useState('all');
   const [localInteractions, setLocalInteractions] = useState({});
+
+  const feedCategories = useMemo(
+    () => [categories[0], { id: 'following', label: 'Following', icon: '👥' }, ...categories.slice(1)],
+    [categories],
+  );
 
   const mockPosts = useMemo(
     () => posts.map((post) => toMockFeedPost(post, localInteractions[`mock-${post.id}`])),
     [localInteractions, posts],
   );
 
-  const allPosts = useMemo(() => [...livePosts, ...mockPosts], [livePosts, mockPosts]);
+  const allPosts = useMemo(
+    () => [...livePosts.map((post) => ({ ...post, viewerHasSaved: savedPostIds.has(post.id) })), ...mockPosts],
+    [livePosts, mockPosts, savedPostIds],
+  );
   const heroPosts = useMemo(
     () => allPosts.filter((post) => (post.mediaUrl || post.imageUrl) && post.mediaType !== 'video').slice(0, 3),
     [allPosts],
@@ -66,15 +85,19 @@ export default function HomeFeed({
     [allPosts],
   );
 
-  const activeCategory = categories.find((category) => category.id === activeCategoryId) ?? categories[0];
+  const activeCategory = feedCategories.find((category) => category.id === activeCategoryId) ?? feedCategories[0];
 
   const filteredPosts = useMemo(() => {
     if (activeCategoryId === 'all') {
       return allPosts;
     }
 
+    if (activeCategoryId === 'following') {
+      return allPosts.filter((post) => post.authorId && followingIds.has(post.authorId));
+    }
+
     return allPosts.filter((post) => post.categoryId === activeCategoryId);
-  }, [activeCategoryId, allPosts]);
+  }, [activeCategoryId, allPosts, followingIds]);
 
   async function handleCreatePost(postData) {
     return onCreatePost?.(postData);
@@ -95,6 +118,24 @@ export default function HomeFeed({
           ...previous,
           viewerHasLiked,
           likesDelta: viewerHasLiked ? 1 : 0,
+        },
+      };
+    });
+  }
+
+  async function handleToggleSave(post) {
+    if (post.isLive) {
+      await onToggleSave?.(post);
+      return;
+    }
+
+    setLocalInteractions((current) => {
+      const previous = current[post.id] ?? {};
+      return {
+        ...current,
+        [post.id]: {
+          ...previous,
+          viewerHasSaved: !previous.viewerHasSaved,
         },
       };
     });
@@ -180,7 +221,7 @@ export default function HomeFeed({
 
       <HobbyTabs
         activeCategoryId={activeCategoryId}
-        categories={categories}
+        categories={feedCategories}
         onCategoryChange={setActiveCategoryId}
       />
 
@@ -189,26 +230,37 @@ export default function HomeFeed({
         <span>{filteredPosts.length} post{filteredPosts.length === 1 ? '' : 's'} showing</span>
       </div>
 
-      <div className="feed-list" aria-live="polite">
-        {filteredPosts.length > 0 ? (
-          filteredPosts.map((post) => (
-            <PostCard
-              currentUser={currentUser}
-              key={post.id}
-              onAddComment={handleAddComment}
-              onShare={handleShare}
-              onToggleLike={handleToggleLike}
-              post={post}
-              profile={profile}
-            />
-          ))
-        ) : (
-          <div className="empty-state">
-            <strong>No posts yet</strong>
-            <p>Try another hobby category or create the first post for this hobby.</p>
-          </div>
-        )}
-      </div>
+      {isLoading ? (
+        <LoadingSkeleton count={3} type="feed" />
+      ) : (
+        <div className="feed-list" aria-live="polite">
+          {filteredPosts.length > 0 ? (
+            filteredPosts.map((post) => (
+              <PostCard
+                categories={categories}
+                currentUser={currentUser}
+                key={post.id}
+                onAddComment={handleAddComment}
+                onDeleteComment={onDeleteComment}
+                onDeletePost={onDeletePost}
+                onReport={onReport}
+                onShare={handleShare}
+                onToggleLike={handleToggleLike}
+                onToggleSave={handleToggleSave}
+                onUpdatePost={onUpdatePost}
+                onViewProfile={onViewProfile}
+                post={post}
+                profile={profile}
+              />
+            ))
+          ) : (
+            <div className="empty-state">
+              <strong>No posts yet</strong>
+              <p>Try another hobby category, follow creators, or create the first post for this hobby.</p>
+            </div>
+          )}
+        </div>
+      )}
     </section>
   );
 }

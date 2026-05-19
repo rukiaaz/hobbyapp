@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-export default function SuggestedCreators({ creators }) {
+export default function SuggestedCreators({ creators, onViewCreator }) {
   const [followedCreatorIds, setFollowedCreatorIds] = useState(() => new Set());
   const [rotationOffset, setRotationOffset] = useState(0);
 
@@ -45,11 +45,21 @@ export default function SuggestedCreators({ creators }) {
               <div className="mini-avatar media-avatar" aria-hidden="true">
                 {creator.imageUrl ? <img alt="" src={creator.imageUrl} /> : creator.name.slice(0, 1)}
               </div>
-              <div>
+              <button
+                className="creator-copy-button"
+                onClick={() => onViewCreator?.({
+                  avatar: creator.name.slice(0, 1),
+                  bio: `${creator.hobby} creator on Hobby App.`,
+                  displayName: creator.name,
+                  handle: creator.handle,
+                  mainHobby: creator.hobby,
+                })}
+                type="button"
+              >
                 <strong>{creator.name}</strong>
                 <p>{creator.handle} · {creator.hobby}</p>
                 <span>{creator.followers} followers</span>
-              </div>
+              </button>
               <button
                 className={isFollowing ? 'following' : ''}
                 onClick={() => toggleFollow(creator.id)}

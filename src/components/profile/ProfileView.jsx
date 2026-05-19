@@ -6,7 +6,7 @@ function getUsernameValue(profile) {
   return (profile?.username || profile?.handle || '').replace(/^@+/, '');
 }
 
-export default function ProfileView({ appProfile, errorMessage = '', onUpdateProfile, posts, profile }) {
+export default function ProfileView({ appProfile, errorMessage = '', livePosts = [], onUpdateProfile, posts, profile }) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [localError, setLocalError] = useState('');
@@ -16,7 +16,16 @@ export default function ProfileView({ appProfile, errorMessage = '', onUpdatePro
     return [...hobbies];
   }, [posts, profile?.mainHobby]);
 
+  const ownLivePosts = useMemo(
+    () => livePosts.filter((post) => post.authorId === profile?.uid),
+    [livePosts, profile?.uid],
+  );
+
   const relatedPosts = useMemo(() => {
+    if (ownLivePosts.length > 0) {
+      return ownLivePosts;
+    }
+
     const mainHobby = profile?.mainHobby?.toLowerCase();
 
     if (!mainHobby) {
@@ -25,7 +34,7 @@ export default function ProfileView({ appProfile, errorMessage = '', onUpdatePro
 
     const matches = posts.filter((post) => post.hobby.toLowerCase().includes(mainHobby));
     return matches.length > 0 ? matches : posts.slice(0, 6);
-  }, [posts, profile?.mainHobby]);
+  }, [ownLivePosts, posts, profile?.mainHobby]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -168,8 +177,8 @@ export default function ProfileView({ appProfile, errorMessage = '', onUpdatePro
       <section className="profile-preview" aria-labelledby="profile-inspiration-title">
         <div className="section-heading">
           <div>
-            <p id="profile-inspiration-title">Inspiration for your next post</p>
-            <span>Based on your current hobby profile</span>
+            <p id="profile-inspiration-title">Your post grid</p>
+            <span>{ownLivePosts.length > 0 ? 'Live posts shared by you' : 'Inspiration based on your current hobby profile'}</span>
           </div>
         </div>
         <PostGrid posts={relatedPosts} />

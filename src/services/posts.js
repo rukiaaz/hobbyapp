@@ -1,6 +1,7 @@
 import {
   addDoc,
   collection,
+  deleteDoc,
   doc,
   getDoc,
   increment,
@@ -9,9 +10,12 @@ import {
   query,
   runTransaction,
   serverTimestamp,
+  setDoc,
   updateDoc,
+  where,
 } from 'firebase/firestore';
 import { db } from './firebase.js';
+import { validatePostMediaFile } from '../utils/mediaValidation.js';
 
 const cloudinaryConfig = {
   cloudName: import.meta.env.VITE_CLOUDINARY_CLOUD_NAME,
@@ -53,6 +57,17 @@ function getDateFromTimestamp(timestamp) {
   return timestamp?.toDate ? timestamp.toDate() : null;
 }
 
+function getReadableTimestamp(date) {
+  if (!date) {
+    return 'just now';
+  }
+
+  return new Intl.DateTimeFormat('en', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
+
 async function uploadPostMedia(mediaFile) {
   if (!mediaFile) {
     return {
@@ -63,6 +78,12 @@ async function uploadPostMedia(mediaFile) {
       mediaType: '',
       mediaUrl: '',
     };
+  }
+
+  const validation = validatePostMediaFile(mediaFile);
+
+  if (!validation.isValid) {
+    throw createServiceError('media/invalid-file', validation.message);
   }
 
   if (!cloudinaryConfig.cloudName || !cloudinaryConfig.uploadPreset) {
@@ -135,6 +156,8 @@ async function mapPostDocument(postDocument, currentUserId) {
     commentsCount: data.commentsCount ?? 0,
     shareCount: data.shareCount ?? 0,
     timeAgo: getTimeAgo(createdAt),
+    createdAtLabel: getReadableTimestamp(createdAt),
+    updatedAt: data.updatedAt || null,
     viewerHasLiked: Boolean(likedByCurrentUser?.exists()),
   };
 }
@@ -154,10 +177,30 @@ export function listenToPosts(currentUserId, onChange, onError) {
   );
 }
 
+export function listenToUserPosts(userId, currentUserId, onChange, onError) {
+  if (!userId) {
+    onChange([]);
+    return () => {};
+  }
+
+  const postsQuery = query(collection(db, 'posts'), where('authorId', '==', userId), orderBy('createdAt', 'desc'));
+
+  return onSnapshot(
+    postsQuery,
+    async (snapshot) => {
+      const posts = await Promise.all(
+        snapshot.docs.map((postDocument) => mapPostDocument(postDocument, currentUserId)),
+      );
+      onChange(posts);
+    },
+    onError,
+  );
+}
+
 export async function createPost(user, profile, postData) {
   const mediaUpload = await uploadPostMedia(postData.mediaFile ?? postData.imageFile);
 
-  return addDoc(collection(db, 'posts'), {
+  const postRef = await addDoc(collection(db, 'posts'), {
     authorId: user.uid,
     creator: profile.displayName,
     handle: profile.handle,
@@ -179,6 +222,38 @@ export async function createPost(user, profile, postData) {
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   });
+
+  await updateDoc(doc(db, 'users', user.uid), {
+    postsCount: increment(1),
+  });
+
+  return postRef;
+}
+
+export async function updatePost(postId, postData) {
+  const updates = {
+    categoryId: postData.categoryId,
+    hobby: postData.hobby.trim(),
+    title: postData.title.trim(),
+    caption: postData.caption.trim(),
+    updatedAt: serverTimestamp(),
+  };
+
+  await updateDoc(doc(db, 'posts', postId), updates);
+}
+
+export async function deletePost(postId) {
+  const postRef = doc(db, 'posts', postId);
+  const postSnapshot = await getDoc(postRef);
+  const authorId = postSnapshot.data()?.authorId;
+
+  await deleteDoc(postRef);
+
+  if (authorId) {
+    await updateDoc(doc(db, 'users', authorId), {
+      postsCount: increment(-1),
+    });
+  }
 }
 
 export async function togglePostLike(postId, userId) {
@@ -202,6 +277,49 @@ export async function togglePostLike(postId, userId) {
   });
 }
 
+export function listenToSavedPosts(userId, onChange, onError) {
+  if (!userId) {
+    onChange(new Set());
+    return () => {};
+  }
+
+  const savedQuery = query(collection(db, 'users', userId, 'savedPosts'), orderBy('savedAt', 'desc'));
+
+  return onSnapshot(
+    savedQuery,
+    (snapshot) => {
+      onChange(new Set(snapshot.docs.map((savedDocument) => savedDocument.id)));
+    },
+    onError,
+  );
+}
+
+export async function togglePostSave(post, userId) {
+  const savedRef = doc(db, 'users', userId, 'savedPosts', post.id);
+  const savedSnapshot = await getDoc(savedRef);
+
+  if (savedSnapshot.exists()) {
+    await deleteDoc(savedRef);
+    return false;
+  }
+
+  await setDoc(savedRef, {
+    postId: post.id,
+    postAuthorId: post.authorId || '',
+    title: post.title,
+    creator: post.creator,
+    handle: post.handle,
+    hobby: post.hobby,
+    categoryId: post.categoryId,
+    mediaUrl: post.mediaUrl || post.imageUrl || '',
+    mediaType: post.mediaType || '',
+    isLive: Boolean(post.isLive),
+    savedAt: serverTimestamp(),
+  });
+
+  return true;
+}
+
 export function listenToComments(postId, onChange, onError) {
   const commentsQuery = query(collection(db, 'posts', postId, 'comments'), orderBy('createdAt', 'asc'));
 
@@ -218,6 +336,7 @@ export function listenToComments(postId, onChange, onError) {
           avatar: data.avatar,
           text: data.text,
           timeAgo: getTimeAgo(getDateFromTimestamp(data.createdAt)),
+          createdAtLabel: getReadableTimestamp(getDateFromTimestamp(data.createdAt)),
         };
       });
 
@@ -225,6 +344,13 @@ export function listenToComments(postId, onChange, onError) {
     },
     onError,
   );
+}
+
+export async function deletePostComment(postId, commentId) {
+  await deleteDoc(doc(db, 'posts', postId, 'comments', commentId));
+  await updateDoc(doc(db, 'posts', postId), {
+    commentsCount: increment(-1),
+  });
 }
 
 export async function addPostComment(postId, user, profile, text) {
@@ -257,5 +383,6 @@ export function createLocalComment(user, profile, text) {
     avatar: profile.avatar,
     text: text.trim(),
     timeAgo: 'just now',
+    createdAtLabel: 'just now',
   };
 }

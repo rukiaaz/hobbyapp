@@ -1,4 +1,16 @@
-import { collection, doc, getDoc, onSnapshot, orderBy, query, serverTimestamp, setDoc } from 'firebase/firestore';
+import {
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  increment,
+  onSnapshot,
+  orderBy,
+  query,
+  runTransaction,
+  serverTimestamp,
+  setDoc,
+} from 'firebase/firestore';
 import { db } from './firebase.js';
 
 function getInitials(name) {
@@ -35,9 +47,13 @@ function getUserProfileRef(uid) {
 }
 
 function mapUserProfile(profileDocument) {
+  const data = profileDocument.data();
   return {
     id: profileDocument.id,
-    ...profileDocument.data(),
+    followersCount: data.followersCount ?? 0,
+    followingCount: data.followingCount ?? 0,
+    postsCount: data.postsCount ?? 0,
+    ...data,
   };
 }
 
@@ -52,7 +68,16 @@ export async function getVibelyProfile(uid) {
     return null;
   }
 
-  return profileSnapshot.data();
+  return {
+    followersCount: profileSnapshot.data().followersCount ?? 0,
+    followingCount: profileSnapshot.data().followingCount ?? 0,
+    postsCount: profileSnapshot.data().postsCount ?? 0,
+    ...profileSnapshot.data(),
+  };
+}
+
+export async function getPublicProfile(uid) {
+  return getVibelyProfile(uid);
 }
 
 export function listenToUserProfiles(currentUserId, onChange, onError) {
@@ -90,6 +115,9 @@ export async function saveVibelyProfile(user, profileData) {
     email: user.email ?? '',
     photoURL: user.photoURL ?? '',
     authProviders: user.providerData.map((provider) => provider.providerId),
+    followersCount: 0,
+    followingCount: 0,
+    postsCount: 0,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -134,6 +162,64 @@ export async function updateVibelyProfile(user, currentProfile, profileData) {
   };
 }
 
+export function listenToFollowing(userId, onChange, onError) {
+  if (!userId) {
+    onChange(new Set());
+    return () => {};
+  }
+
+  const followingQuery = query(collection(db, 'users', userId, 'following'), orderBy('createdAt', 'desc'));
+
+  return onSnapshot(
+    followingQuery,
+    (snapshot) => onChange(new Set(snapshot.docs.map((followingDocument) => followingDocument.id))),
+    onError,
+  );
+}
+
+export async function toggleFollowUser(currentProfile, targetProfile) {
+  if (!currentProfile?.uid || !targetProfile?.uid || currentProfile.uid === targetProfile.uid) {
+    return false;
+  }
+
+  const followingRef = doc(db, 'users', currentProfile.uid, 'following', targetProfile.uid);
+  const followerRef = doc(db, 'users', targetProfile.uid, 'followers', currentProfile.uid);
+  const currentUserRef = doc(db, 'users', currentProfile.uid);
+  const targetUserRef = doc(db, 'users', targetProfile.uid);
+
+  return runTransaction(db, async (transaction) => {
+    const followingSnapshot = await transaction.get(followingRef);
+
+    if (followingSnapshot.exists()) {
+      transaction.delete(followingRef);
+      transaction.delete(followerRef);
+      transaction.update(currentUserRef, { followingCount: increment(-1) });
+      transaction.update(targetUserRef, { followersCount: increment(-1) });
+      return false;
+    }
+
+    transaction.set(followingRef, {
+      uid: targetProfile.uid,
+      displayName: targetProfile.displayName,
+      handle: targetProfile.handle,
+      avatar: targetProfile.avatar,
+      mainHobby: targetProfile.mainHobby,
+      createdAt: serverTimestamp(),
+    });
+    transaction.set(followerRef, {
+      uid: currentProfile.uid,
+      displayName: currentProfile.displayName,
+      handle: currentProfile.handle,
+      avatar: currentProfile.avatar,
+      mainHobby: currentProfile.mainHobby,
+      createdAt: serverTimestamp(),
+    });
+    transaction.update(currentUserRef, { followingCount: increment(1) });
+    transaction.update(targetUserRef, { followersCount: increment(1) });
+    return true;
+  });
+}
+
 export function toAppProfile(vibelyProfile, fallbackProfile) {
   if (!vibelyProfile) {
     return fallbackProfile;
@@ -145,6 +231,9 @@ export function toAppProfile(vibelyProfile, fallbackProfile) {
     username: vibelyProfile.handle,
     avatar: vibelyProfile.avatar,
     bio: vibelyProfile.bio,
+    followers: vibelyProfile.followersCount ?? fallbackProfile.followers,
+    following: vibelyProfile.followingCount ?? fallbackProfile.following,
+    posts: vibelyProfile.postsCount ?? fallbackProfile.posts,
     featuredHobbies: [vibelyProfile.mainHobby, ...fallbackProfile.featuredHobbies.slice(1)],
   };
 }

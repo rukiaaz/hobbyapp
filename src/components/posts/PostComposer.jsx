@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { validatePostMediaFile } from '../../utils/mediaValidation.js';
 
 function getMediaKind(file) {
   if (!file) {
@@ -13,6 +14,7 @@ export default function PostComposer({ categories, isSubmitting = false, onCreat
   const [categoryId, setCategoryId] = useState(categories[1]?.id ?? 'crafts');
   const [hobby, setHobby] = useState(profile?.mainHobby ?? '');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [localError, setLocalError] = useState('');
   const [mediaFile, setMediaFile] = useState(null);
   const [mediaPreview, setMediaPreview] = useState('');
   const [title, setTitle] = useState('');
@@ -49,6 +51,7 @@ export default function PostComposer({ categories, isSubmitting = false, onCreat
   function clearDraft() {
     setCaption('');
     setHobby(profile?.mainHobby ?? '');
+    setLocalError('');
     setMediaFile(null);
     setTitle('');
   }
@@ -63,8 +66,28 @@ export default function PostComposer({ categories, isSubmitting = false, onCreat
     form.reset();
   }
 
+  function handleMediaChange(file) {
+    const validation = validatePostMediaFile(file);
+
+    if (!validation.isValid) {
+      setLocalError(validation.message);
+      setMediaFile(null);
+      return;
+    }
+
+    setLocalError('');
+    setMediaFile(file);
+  }
+
   async function handleSubmit(event) {
     event.preventDefault();
+
+    const validation = validatePostMediaFile(mediaFile);
+
+    if (!validation.isValid) {
+      setLocalError(validation.message);
+      return;
+    }
 
     const form = event.currentTarget;
     const didCreate = await onCreatePost?.({
@@ -195,7 +218,7 @@ export default function PostComposer({ categories, isSubmitting = false, onCreat
                 <input
                   accept="image/*,video/*"
                   id="post-media"
-                  onChange={(event) => setMediaFile(event.target.files?.[0] ?? null)}
+                  onChange={(event) => handleMediaChange(event.target.files?.[0] ?? null)}
                   type="file"
                 />
                 {mediaPreview && (
@@ -211,6 +234,14 @@ export default function PostComposer({ categories, isSubmitting = false, onCreat
                   {!mediaPreview && <small>Tap the icon to choose media from your device</small>}
                 </label>
               </div>
+
+              {localError && <p className="auth-message">{localError}</p>}
+
+              {isSubmitting && (
+                <div className="upload-progress" aria-label="Uploading media and publishing post">
+                  <span />
+                </div>
+              )}
 
               <div className="composer-modal-actions">
                 <button className="text-button" disabled={isSubmitting} onClick={closeComposer} type="button">

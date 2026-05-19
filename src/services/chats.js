@@ -10,6 +10,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db } from './firebase.js';
+import { validateChatImageFile } from '../utils/mediaValidation.js';
 
 const cloudinaryConfig = {
   cloudName: import.meta.env.VITE_CLOUDINARY_CLOUD_NAME,
@@ -70,6 +71,12 @@ function getParticipantSummary(profile) {
 async function uploadChatImage(imageFile) {
   if (!imageFile) {
     return { imagePublicId: '', imageUrl: '' };
+  }
+
+  const validation = validateChatImageFile(imageFile);
+
+  if (!validation.isValid) {
+    throw createServiceError('media/invalid-file', validation.message);
   }
 
   if (!cloudinaryConfig.cloudName || !cloudinaryConfig.uploadPreset) {
@@ -150,6 +157,12 @@ export function listenToUserChats(currentUserId, onChange, onError) {
           const data = chatDocument.data();
           const hasLastMessage = Boolean(data.lastMessage);
           const lastMessageDate = hasLastMessage ? getDateFromTimestamp(data.lastMessageAt || data.updatedAt) : null;
+          const lastReadDate = getDateFromTimestamp(data.lastReadBy?.[currentUserId]);
+          const isUnread = Boolean(
+            hasLastMessage
+              && data.lastMessageSenderId !== currentUserId
+              && (!lastReadDate || (lastMessageDate && lastMessageDate > lastReadDate)),
+          );
 
           return {
             id: chatDocument.id,
@@ -157,6 +170,9 @@ export function listenToUserChats(currentUserId, onChange, onError) {
             lastMessageAt: lastMessageDate,
             lastMessageSenderId: data.lastMessageSenderId || '',
             lastMessageTimeAgo: hasLastMessage ? getTimeAgo(lastMessageDate) : '',
+            lastReadAt: lastReadDate,
+            lastReadBy: data.lastReadBy || {},
+            isUnread,
             participants: data.participants || [],
             participantProfiles: data.participantProfiles || {},
             updatedAt: lastMessageDate,
@@ -195,6 +211,10 @@ export function listenToMessages(currentUserId, otherUserId, onChange, onError) 
           imagePublicId: data.imagePublicId || '',
           imageUrl: data.imageUrl || '',
           mediaType: data.mediaType || '',
+          createdAt: getDateFromTimestamp(data.createdAt),
+          createdAtLabel: getDateFromTimestamp(data.createdAt)
+            ? new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(getDateFromTimestamp(data.createdAt))
+            : 'just now',
           timeAgo: getTimeAgo(getDateFromTimestamp(data.createdAt)),
         };
       });
@@ -202,6 +222,24 @@ export function listenToMessages(currentUserId, otherUserId, onChange, onError) 
       onChange(messages);
     },
     onError,
+  );
+}
+
+export async function markChatRead(currentUserId, otherUserId) {
+  if (!currentUserId || !otherUserId) {
+    return;
+  }
+
+  const chatId = getChatId(currentUserId, otherUserId);
+
+  await setDoc(
+    doc(db, 'chats', chatId),
+    {
+      lastReadBy: {
+        [currentUserId]: serverTimestamp(),
+      },
+    },
+    { merge: true },
   );
 }
 

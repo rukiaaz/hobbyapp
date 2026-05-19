@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ensureChat, listenToMessages, listenToUserChats, sendMessage } from '../../services/chats.js';
+import { ensureChat, listenToMessages, listenToUserChats, markChatRead, sendMessage } from '../../services/chats.js';
 import { listenToUserProfiles } from '../../services/vibelyProfile.js';
+import { validateChatImageFile } from '../../utils/mediaValidation.js';
 
 function getNicknameStorageKey(currentUserId) {
   return currentUserId ? `hobby-app-chat-nicknames:${currentUserId}` : '';
@@ -36,14 +37,25 @@ function getDisplayName(user, nicknames) {
   return nicknames[user.uid] || user.displayName;
 }
 
-export default function ChatPanel({ currentUser, profile }) {
+export default function ChatPanel({
+  blockedUserIds = new Set(),
+  currentUser,
+  followingIds = new Set(),
+  onBlock,
+  onFollow,
+  onReport,
+  onViewProfile,
+  profile,
+}) {
   const [chatError, setChatError] = useState('');
   const [chatSummaries, setChatSummaries] = useState([]);
   const [draft, setDraft] = useState('');
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState('');
+  const [conversationSearch, setConversationSearch] = useState('');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState('');
   const [messages, setMessages] = useState([]);
   const [nicknameDraft, setNicknameDraft] = useState('');
   const [nicknames, setNicknames] = useState({});
@@ -72,7 +84,10 @@ export default function ChatPanel({ currentUser, profile }) {
   }, [chatSummaries, currentUser?.uid]);
 
   const conversationUsers = useMemo(() => {
+    const normalizedSearch = conversationSearch.trim().toLowerCase();
+
     return users
+      .filter((user) => !blockedUserIds.has(user.uid))
       .map((user) => {
         const chat = chatByUserId.get(user.uid);
         const latestPrefix = chat?.lastMessageSenderId === currentUser?.uid ? 'You: ' : '';
@@ -80,10 +95,20 @@ export default function ChatPanel({ currentUser, profile }) {
           ...user,
           chat,
           displayName: getDisplayName(user, nicknames),
+          isUnread: Boolean(chat?.isUnread),
           latestMessage: chat?.lastMessage ? `${latestPrefix}${chat.lastMessage}` : 'No messages yet',
           latestTime: chat?.lastMessageTimeAgo ?? '',
           sortTime: chat?.updatedAt?.getTime() ?? 0,
         };
+      })
+      .filter((user) => {
+        if (!normalizedSearch) {
+          return true;
+        }
+
+        return [user.displayName, user.handle, user.mainHobby, user.latestMessage]
+          .filter(Boolean)
+          .some((value) => value.toLowerCase().includes(normalizedSearch));
       })
       .sort((first, second) => {
         if (second.sortTime !== first.sortTime) {
@@ -92,7 +117,7 @@ export default function ChatPanel({ currentUser, profile }) {
 
         return first.displayName.localeCompare(second.displayName);
       });
-  }, [chatByUserId, currentUser?.uid, nicknames, users]);
+  }, [blockedUserIds, chatByUserId, conversationSearch, currentUser?.uid, nicknames, users]);
 
   useEffect(() => {
     setNicknames(getSavedNicknames(currentUser?.uid));
@@ -176,7 +201,24 @@ export default function ChatPanel({ currentUser, profile }) {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-  }, [messages]);
+
+    if (selectedUser?.uid && currentUser?.uid && messages.length > 0) {
+      markChatRead(currentUser.uid, selectedUser.uid).catch(() => {});
+    }
+  }, [currentUser?.uid, messages, selectedUser?.uid]);
+
+  function handleImageChange(file) {
+    const validation = validateChatImageFile(file);
+
+    if (!validation.isValid) {
+      setChatError(validation.message);
+      clearImageDraft();
+      return;
+    }
+
+    setChatError('');
+    setImageFile(file);
+  }
 
   function clearImageDraft() {
     setImageFile(null);
@@ -236,6 +278,8 @@ export default function ChatPanel({ currentUser, profile }) {
   }
 
   const selectedDisplayName = selectedUser ? getDisplayName(selectedUser, nicknames) : '';
+  const selectedIsFollowing = selectedUser?.uid ? followingIds.has(selectedUser.uid) : false;
+  const selectedIsBlocked = selectedUser?.uid ? blockedUserIds.has(selectedUser.uid) : false;
 
   return (
     <section className="chat-card" aria-labelledby="chat-title">
@@ -296,9 +340,23 @@ export default function ChatPanel({ currentUser, profile }) {
                     value={nicknameDraft}
                   />
                 </label>
-                <button className="auth-submit" onClick={handleSaveNickname} type="button">
-                  Save nickname
-                </button>
+                <div className="chat-profile-actions">
+                  <button className="auth-submit" onClick={handleSaveNickname} type="button">
+                    Save nickname
+                  </button>
+                  <button className="text-button" onClick={() => onViewProfile?.(selectedUser)} type="button">
+                    Open full profile
+                  </button>
+                  <button className="text-button" onClick={() => onFollow?.(selectedUser)} type="button">
+                    {selectedIsFollowing ? 'Following' : 'Follow'}
+                  </button>
+                  <button className="text-button" onClick={() => onBlock?.(selectedUser)} type="button">
+                    {selectedIsBlocked ? 'Unblock' : 'Block'}
+                  </button>
+                  <button className="text-button" onClick={() => onReport?.('user', selectedUser.uid)} type="button">
+                    Report
+                  </button>
+                </div>
               </section>
             )}
 
@@ -310,7 +368,9 @@ export default function ChatPanel({ currentUser, profile }) {
                   return (
                     <article className={`message-bubble ${isOwnMessage ? 'own' : ''}`} key={message.id}>
                       {message.imageUrl && (
-                        <img className="message-image" alt="Shared chat attachment" src={message.imageUrl} />
+                        <button className="message-image-button" onClick={() => setLightboxImage(message.imageUrl)} type="button">
+                          <img className="message-image" alt="Shared chat attachment" src={message.imageUrl} />
+                        </button>
                       )}
                       {message.text && <p>{message.text}</p>}
                       <span>{message.timeAgo}</span>
@@ -332,6 +392,12 @@ export default function ChatPanel({ currentUser, profile }) {
               </div>
             )}
 
+            {isSending && (
+              <div className="upload-progress chat-upload-progress" aria-label="Sending message">
+                <span />
+              </div>
+            )}
+
             <form className="chat-form" onSubmit={handleSubmit}>
               <label className="chat-image-button" htmlFor={`chat-image-${selectedUser.uid}`}>
                 <span aria-hidden="true">📷</span>
@@ -340,7 +406,7 @@ export default function ChatPanel({ currentUser, profile }) {
               <input
                 accept="image/*"
                 id={`chat-image-${selectedUser.uid}`}
-                onChange={(event) => setImageFile(event.target.files?.[0] ?? null)}
+                onChange={(event) => handleImageChange(event.target.files?.[0] ?? null)}
                 ref={imageInputRef}
                 type="file"
               />
@@ -358,30 +424,60 @@ export default function ChatPanel({ currentUser, profile }) {
             </form>
           </div>
         ) : (
-          <div className="chat-thread-list" aria-label="Messages">
-            {conversationUsers.map((user) => (
-              <button
-                className="chat-thread-row"
-                key={user.uid}
-                onClick={() => setSelectedUserId(user.uid)}
-                type="button"
-              >
-                <span className="mini-avatar" aria-hidden="true">
-                  {user.avatar || user.displayName.slice(0, 1)}
-                </span>
-                <span>
-                  <strong>{user.displayName}</strong>
-                  <small>{user.latestMessage}</small>
-                </span>
-                {user.latestTime && <time>{user.latestTime}</time>}
-              </button>
-            ))}
-          </div>
+          <>
+            <label className="search-box chat-search" htmlFor="conversation-search">
+              <span className="sr-only">Search conversations</span>
+              <input
+                id="conversation-search"
+                onChange={(event) => setConversationSearch(event.target.value)}
+                placeholder="Search messages"
+                type="search"
+                value={conversationSearch}
+              />
+            </label>
+
+            <div className="chat-thread-list" aria-label="Messages">
+              {conversationUsers.map((user) => (
+                <button
+                  className={`chat-thread-row ${user.isUnread ? 'unread' : ''}`}
+                  key={user.uid}
+                  onClick={() => setSelectedUserId(user.uid)}
+                  type="button"
+                >
+                  <span className="mini-avatar" aria-hidden="true">
+                    {user.avatar || user.displayName.slice(0, 1)}
+                  </span>
+                  <span>
+                    <strong>{user.displayName}</strong>
+                    <small>{user.latestMessage}</small>
+                  </span>
+                  {user.isUnread && <span className="unread-dot" aria-label="Unread message" />}
+                  {user.latestTime && <time>{user.latestTime}</time>}
+                </button>
+              ))}
+
+              {conversationUsers.length === 0 && (
+                <div className="empty-state compact">
+                  <strong>No matching conversations</strong>
+                  <p>Try another name, nickname, or hobby.</p>
+                </div>
+              )}
+            </div>
+          </>
         )
       ) : (
         <div className="empty-state compact">
           <strong>No Vibely users yet</strong>
           <p>Ask a friend to sign up, then you can chat here.</p>
+        </div>
+      )}
+
+      {lightboxImage && (
+        <div className="lightbox-backdrop" onClick={() => setLightboxImage('')} role="presentation">
+          <figure className="lightbox-card">
+            <img alt="Expanded chat attachment" src={lightboxImage} />
+            <button onClick={() => setLightboxImage('')} type="button" aria-label="Close image preview">×</button>
+          </figure>
         </div>
       )}
     </section>

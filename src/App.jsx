@@ -1,48 +1,75 @@
-import { useEffect, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import { onAuthStateChanged, signOut, updateProfile } from 'firebase/auth';
 import { hobbyCategories, posts, suggestedCreators, userProfile } from './data/mockData.js';
 import AuthPage from './components/auth/AuthPage.jsx';
-import ChatPanel from './components/chat/ChatPanel.jsx';
-import ExploreView from './components/explore/ExploreView.jsx';
+import LoadingSkeleton from './components/common/LoadingSkeleton.jsx';
 import HomeFeed from './components/feed/HomeFeed.jsx';
 import BottomNav from './components/layout/BottomNav.jsx';
 import Header from './components/layout/Header.jsx';
 import VibelyOnboarding from './components/onboarding/VibelyOnboarding.jsx';
-import CreatePostView from './components/posts/CreatePostView.jsx';
 import PostGrid from './components/posts/PostGrid.jsx';
 import ProfileHeader from './components/profile/ProfileHeader.jsx';
-import ProfileView from './components/profile/ProfileView.jsx';
 import SuggestedCreators from './components/sidebar/SuggestedCreators.jsx';
 import { auth, isFirebaseConfigured } from './services/firebase.js';
-import { createPost, listenToPosts } from './services/posts.js';
+import { listenToBlockedUsers, createReport, toggleBlockUser } from './services/moderation.js';
+import {
+  createPost,
+  deletePost,
+  deletePostComment,
+  listenToPosts,
+  listenToSavedPosts,
+  togglePostSave,
+  updatePost,
+} from './services/posts.js';
 import {
   getVibelyProfile,
+  listenToFollowing,
+  listenToUserProfiles,
   saveVibelyProfile,
   toAppProfile,
+  toggleFollowUser,
   updateVibelyProfile,
 } from './services/vibelyProfile.js';
 
-const signedInViews = new Set(['home', 'explore', 'create', 'messages', 'profile']);
+const ChatPanel = lazy(() => import('./components/chat/ChatPanel.jsx'));
+const CreatePostView = lazy(() => import('./components/posts/CreatePostView.jsx'));
+const ExploreView = lazy(() => import('./components/explore/ExploreView.jsx'));
+const HobbyDetailView = lazy(() => import('./components/explore/HobbyDetailView.jsx'));
+const ProfileView = lazy(() => import('./components/profile/ProfileView.jsx'));
+const PublicProfileView = lazy(() => import('./components/profile/PublicProfileView.jsx'));
 
-function getSignedInViewFromHash() {
+const signedInViews = new Set(['home', 'explore', 'create', 'messages', 'profile', 'public-profile', 'hobby']);
+
+function getHashSegments() {
   if (typeof window === 'undefined') {
-    return null;
+    return [];
   }
 
-  const hashRoute = window.location.hash.replace(/^#\/?/, '').split(/[/?]/).at(0);
+  return window.location.hash
+    .replace(/^#\/?/, '')
+    .split(/[/?]/)
+    .filter(Boolean);
+}
+
+function getSignedInViewFromHash() {
+  const hashRoute = getHashSegments().at(0);
   return signedInViews.has(hashRoute) ? hashRoute : null;
+}
+
+function getHashParam() {
+  return getHashSegments().at(1) || '';
 }
 
 function getInitialSignedInView() {
   return getSignedInViewFromHash() ?? 'home';
 }
 
-function writeSignedInViewToHash(view, { replace = false } = {}) {
+function writeSignedInViewToHash(view, { param = '', replace = false } = {}) {
   if (typeof window === 'undefined') {
     return;
   }
 
-  const nextHash = `#/${view}`;
+  const nextHash = `#/${view}${param ? `/${param}` : ''}`;
 
   if (window.location.hash === nextHash) {
     return;
@@ -75,22 +102,48 @@ export default function App() {
       ? ''
       : 'Firebase is not configured. Create .env.local in the project root with your Firebase web app keys, then restart npm run dev.',
   );
+  const [activeHobbyId, setActiveHobbyId] = useState(() => getHashParam());
+  const [blockedUserIds, setBlockedUserIds] = useState(new Set());
+  const [followingIds, setFollowingIds] = useState(new Set());
   const [isCreatingPost, setIsCreatingPost] = useState(false);
+  const [isPostsLoading, setIsPostsLoading] = useState(false);
   const [livePosts, setLivePosts] = useState([]);
   const [postError, setPostError] = useState('');
   const [profileError, setProfileError] = useState('');
+  const [reportNotice, setReportNotice] = useState('');
+  const [savedPostIds, setSavedPostIds] = useState(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedPublicProfile, setSelectedPublicProfile] = useState(null);
   const [signedInView, setSignedInView] = useState(getInitialSignedInView);
+  const [userProfiles, setUserProfiles] = useState([]);
   const [vibelyProfile, setVibelyProfile] = useState(null);
 
   const isSignedIn = Boolean(currentUser);
   const needsVibelyProfile = isSignedIn && !vibelyProfile;
   const activeView = isSignedIn ? (needsVibelyProfile ? 'onboarding' : signedInView) : authMode;
   const profilePreview = toAppProfile(vibelyProfile, userProfile);
+  const allPostsForDiscovery = useMemo(() => [...livePosts, ...posts], [livePosts]);
+  const activeHobby = hobbyCategories.find((category) => category.id === activeHobbyId) ?? hobbyCategories[0];
+  const selectedPublicPosts = useMemo(() => {
+    if (!selectedPublicProfile) {
+      return [];
+    }
+
+    if (selectedPublicProfile.uid) {
+      return livePosts.filter((post) => post.authorId === selectedPublicProfile.uid);
+    }
+
+    return allPostsForDiscovery.filter((post) => post.handle === selectedPublicProfile.handle);
+  }, [allPostsForDiscovery, livePosts, selectedPublicProfile]);
 
   useEffect(() => {
     function syncRouteFromHash() {
-      setSignedInView(getSignedInViewFromHash() ?? 'home');
+      const nextView = getSignedInViewFromHash() ?? 'home';
+      setSignedInView(nextView);
+
+      if (nextView === 'hobby') {
+        setActiveHobbyId(getHashParam() || 'all');
+      }
     }
 
     syncRouteFromHash();
@@ -159,14 +212,75 @@ export default function App() {
 
   useEffect(() => {
     if (!currentUser?.uid || needsVibelyProfile) {
+      setIsPostsLoading(false);
       setLivePosts([]);
       return undefined;
     }
 
+    setIsPostsLoading(true);
+
     return listenToPosts(
       currentUser.uid,
-      setLivePosts,
-      (error) => setPostError(`Could not load live posts. Check Firestore rules. (${error.code ?? 'unknown-error'})`),
+      (nextPosts) => {
+        setLivePosts(nextPosts);
+        setIsPostsLoading(false);
+      },
+      (error) => {
+        setIsPostsLoading(false);
+        setPostError(`Could not load live posts. Check Firestore rules. (${error.code ?? 'unknown-error'})`);
+      },
+    );
+  }, [currentUser?.uid, needsVibelyProfile]);
+
+  useEffect(() => {
+    if (!currentUser?.uid || needsVibelyProfile) {
+      setSavedPostIds(new Set());
+      return undefined;
+    }
+
+    return listenToSavedPosts(
+      currentUser.uid,
+      setSavedPostIds,
+      (error) => setPostError(`Could not load saved posts. (${error.code ?? 'unknown-error'})`),
+    );
+  }, [currentUser?.uid, needsVibelyProfile]);
+
+  useEffect(() => {
+    if (!vibelyProfile?.uid || needsVibelyProfile) {
+      setFollowingIds(new Set());
+      return undefined;
+    }
+
+    return listenToFollowing(
+      vibelyProfile.uid,
+      setFollowingIds,
+      (error) => setProfileError(`Could not load following. (${error.code ?? 'unknown-error'})`),
+    );
+  }, [needsVibelyProfile, vibelyProfile?.uid]);
+
+  useEffect(() => {
+    if (!currentUser?.uid || needsVibelyProfile) {
+      setUserProfiles([]);
+      return undefined;
+    }
+
+    return listenToUserProfiles(
+      currentUser.uid,
+      setUserProfiles,
+      (error) => setProfileError(`Could not load people. (${error.code ?? 'unknown-error'})`),
+    );
+  }, [currentUser?.uid, needsVibelyProfile]);
+
+  useEffect(() => {
+    if (!currentUser?.uid || needsVibelyProfile) {
+      setBlockedUserIds(new Set());
+      return undefined;
+    }
+
+    return listenToBlockedUsers(
+      currentUser.uid,
+      setBlockedUserIds,
+      (error) => setProfileError(`Could not load blocked users. (${error.code ?? 'unknown-error'})`),
     );
   }, [currentUser?.uid, needsVibelyProfile]);
 
@@ -272,6 +386,129 @@ export default function App() {
     }
   }
 
+  async function handleToggleSave(post) {
+    if (!currentUser?.uid) {
+      return false;
+    }
+
+    setPostError('');
+
+    try {
+      return await togglePostSave(post, currentUser.uid);
+    } catch (error) {
+      setPostError(`Could not save post. (${error.code ?? 'unknown-error'})`);
+      return false;
+    }
+  }
+
+  async function handleUpdatePost(postId, postData) {
+    setPostError('');
+
+    try {
+      await updatePost(postId, postData);
+      return true;
+    } catch (error) {
+      setPostError(`Could not update post. (${error.code ?? 'unknown-error'})`);
+      return false;
+    }
+  }
+
+  async function handleDeletePost(postId) {
+    setPostError('');
+
+    try {
+      await deletePost(postId);
+      return true;
+    } catch (error) {
+      setPostError(`Could not delete post. (${error.code ?? 'unknown-error'})`);
+      return false;
+    }
+  }
+
+  async function handleDeleteComment(postId, commentId) {
+    setPostError('');
+
+    try {
+      await deletePostComment(postId, commentId);
+      return true;
+    } catch (error) {
+      setPostError(`Could not delete comment. (${error.code ?? 'unknown-error'})`);
+      return false;
+    }
+  }
+
+  async function handleToggleFollow(targetProfile) {
+    if (!vibelyProfile?.uid || !targetProfile?.uid) {
+      return false;
+    }
+
+    setProfileError('');
+
+    try {
+      const isNowFollowing = await toggleFollowUser(vibelyProfile, targetProfile);
+      setVibelyProfile((current) => current
+        ? {
+            ...current,
+            followingCount: Math.max(0, (current.followingCount ?? 0) + (isNowFollowing ? 1 : -1)),
+          }
+        : current);
+      setSelectedPublicProfile((current) => current?.uid === targetProfile.uid
+        ? {
+            ...current,
+            followersCount: Math.max(0, (current.followersCount ?? 0) + (isNowFollowing ? 1 : -1)),
+          }
+        : current);
+      return isNowFollowing;
+    } catch (error) {
+      setProfileError(`Could not update follow. (${error.code ?? 'unknown-error'})`);
+      return false;
+    }
+  }
+
+  async function handleToggleBlock(targetProfile) {
+    if (!currentUser?.uid || !targetProfile?.uid) {
+      return false;
+    }
+
+    try {
+      return await toggleBlockUser(currentUser.uid, targetProfile);
+    } catch (error) {
+      setProfileError(`Could not update block. (${error.code ?? 'unknown-error'})`);
+      return false;
+    }
+  }
+
+  async function handleReport(targetType, targetId) {
+    if (!currentUser?.uid || !targetId) {
+      return;
+    }
+
+    try {
+      await createReport({ currentUserId: currentUser.uid, targetId, targetType });
+      setReportNotice('Report saved for review. This is a placeholder moderation flow.');
+    } catch (error) {
+      setReportNotice(`Could not submit report. (${error.code ?? 'unknown-error'})`);
+    }
+  }
+
+  function handleViewProfile(profileToView) {
+    if (!profileToView) {
+      return;
+    }
+
+    const resolvedProfile = profileToView.uid
+      ? userProfiles.find((user) => user.uid === profileToView.uid) ?? profileToView
+      : profileToView;
+
+    setSelectedPublicProfile(resolvedProfile);
+    navigateSignedInView('public-profile', { replace: false });
+  }
+
+  function handleOpenHobby(categoryId) {
+    setActiveHobbyId(categoryId);
+    navigateSignedInView('hobby', { param: categoryId });
+  }
+
   async function handleUpdateVibelyProfile(profileData) {
     setProfileError('');
 
@@ -297,9 +534,15 @@ export default function App() {
       await signOut(auth);
     }
     setAuthMode('login');
+    setBlockedUserIds(new Set());
+    setFollowingIds(new Set());
     setLivePosts([]);
     setPostError('');
+    setReportNotice('');
+    setSavedPostIds(new Set());
+    setSelectedPublicProfile(null);
     setSignedInView('home');
+    setUserProfiles([]);
     setSearchQuery('');
     clearRouteHash();
   }
@@ -345,70 +588,134 @@ export default function App() {
       ) : isSignedIn ? (
         <main className="layout">
           <section className="main-column" aria-label={`${activeView} screen`}>
-            {activeView === 'home' && (
-              <>
-                <HomeFeed
+            {reportNotice && <p className="success-message">{reportNotice}</p>}
+
+            <Suspense fallback={<LoadingSkeleton count={3} type="route" />}>
+              {activeView === 'home' && (
+                <>
+                  <HomeFeed
+                    categories={hobbyCategories}
+                    currentUser={currentUser}
+                    feedError={postError}
+                    followingIds={followingIds}
+                    isCreatingPost={isCreatingPost}
+                    isLoading={isPostsLoading}
+                    livePosts={livePosts}
+                    onCreatePost={handleCreatePost}
+                    onDeleteComment={handleDeleteComment}
+                    onDeletePost={handleDeletePost}
+                    onReport={handleReport}
+                    onToggleSave={handleToggleSave}
+                    onUpdatePost={handleUpdatePost}
+                    onViewProfile={handleViewProfile}
+                    posts={posts}
+                    profile={vibelyProfile}
+                    savedPostIds={savedPostIds}
+                  />
+
+                  <section className="profile-preview" aria-labelledby="profile-preview-title">
+                    <div className="section-heading">
+                      <p id="profile-preview-title">Profile preview</p>
+                      <button onClick={() => handleNavigate('profile')} type="button">View profile</button>
+                    </div>
+
+                    <ProfileHeader profile={profilePreview} showEditButton={false} />
+                    <PostGrid posts={livePosts.filter((post) => post.authorId === currentUser?.uid).slice(0, 6).concat(posts.slice(0, 6)).slice(0, 6)} />
+                  </section>
+                </>
+              )}
+
+              {activeView === 'explore' && (
+                <ExploreView
                   categories={hobbyCategories}
-                  currentUser={currentUser}
                   feedError={postError}
-                  isCreatingPost={isCreatingPost}
+                  isLoading={isPostsLoading}
                   livePosts={livePosts}
+                  onOpenHobby={handleOpenHobby}
+                  onSearchChange={setSearchQuery}
+                  onViewProfile={handleViewProfile}
+                  posts={posts}
+                  searchQuery={searchQuery}
+                  userProfiles={userProfiles}
+                />
+              )}
+
+              {activeView === 'hobby' && (
+                <HobbyDetailView
+                  category={activeHobby}
+                  onBack={() => handleNavigate('explore')}
+                  onSearchChange={setSearchQuery}
+                  posts={allPostsForDiscovery}
+                  searchQuery={searchQuery}
+                />
+              )}
+
+              {activeView === 'create' && (
+                <CreatePostView
+                  categories={hobbyCategories}
+                  errorMessage={postError}
+                  isSubmitting={isCreatingPost}
                   onCreatePost={handleCreatePost}
+                  profile={vibelyProfile}
+                />
+              )}
+
+              {activeView === 'messages' && (
+                <ChatPanel
+                  blockedUserIds={blockedUserIds}
+                  currentUser={currentUser}
+                  followingIds={followingIds}
+                  onBlock={handleToggleBlock}
+                  onFollow={handleToggleFollow}
+                  onReport={handleReport}
+                  onViewProfile={handleViewProfile}
+                  profile={vibelyProfile}
+                />
+              )}
+
+              {activeView === 'profile' && (
+                <ProfileView
+                  appProfile={profilePreview}
+                  errorMessage={profileError}
+                  livePosts={livePosts}
+                  onUpdateProfile={handleUpdateVibelyProfile}
                   posts={posts}
                   profile={vibelyProfile}
                 />
+              )}
 
-                <section className="profile-preview" aria-labelledby="profile-preview-title">
-                  <div className="section-heading">
-                    <p id="profile-preview-title">Profile preview</p>
-                    <button onClick={() => handleNavigate('profile')} type="button">View profile</button>
-                  </div>
-
-                  <ProfileHeader profile={profilePreview} showEditButton={false} />
-                  <PostGrid posts={posts.slice(0, 6)} />
-                </section>
-              </>
-            )}
-
-            {activeView === 'explore' && (
-              <ExploreView
-                categories={hobbyCategories}
-                feedError={postError}
-                livePosts={livePosts}
-                onSearchChange={setSearchQuery}
-                posts={posts}
-                searchQuery={searchQuery}
-              />
-            )}
-
-            {activeView === 'create' && (
-              <CreatePostView
-                categories={hobbyCategories}
-                errorMessage={postError}
-                isSubmitting={isCreatingPost}
-                onCreatePost={handleCreatePost}
-                profile={vibelyProfile}
-              />
-            )}
-
-            {activeView === 'messages' && (
-              <ChatPanel currentUser={currentUser} profile={vibelyProfile} />
-            )}
-
-            {activeView === 'profile' && (
-              <ProfileView
-                appProfile={profilePreview}
-                errorMessage={profileError}
-                onUpdateProfile={handleUpdateVibelyProfile}
-                posts={posts}
-                profile={vibelyProfile}
-              />
-            )}
+              {activeView === 'public-profile' && (
+                <PublicProfileView
+                  currentUser={currentUser}
+                  followingIds={followingIds}
+                  isBlocked={Boolean(selectedPublicProfile?.uid && blockedUserIds.has(selectedPublicProfile.uid))}
+                  onBack={() => handleNavigate('explore')}
+                  onBlock={handleToggleBlock}
+                  onFollow={handleToggleFollow}
+                  onReport={handleReport}
+                  posts={selectedPublicPosts}
+                  profile={selectedPublicProfile}
+                />
+              )}
+            </Suspense>
           </section>
 
           <aside className="side-column" aria-label="Community sidebar">
-            {activeView !== 'messages' && <ChatPanel currentUser={currentUser} profile={vibelyProfile} />}
-            <SuggestedCreators creators={suggestedCreators} />
+            <Suspense fallback={<LoadingSkeleton count={1} type="messages" />}>
+              {activeView !== 'messages' && (
+                <ChatPanel
+                  blockedUserIds={blockedUserIds}
+                  currentUser={currentUser}
+                  followingIds={followingIds}
+                  onBlock={handleToggleBlock}
+                  onFollow={handleToggleFollow}
+                  onReport={handleReport}
+                  onViewProfile={handleViewProfile}
+                  profile={vibelyProfile}
+                />
+              )}
+            </Suspense>
+            <SuggestedCreators creators={suggestedCreators} onViewCreator={handleViewProfile} />
           </aside>
         </main>
       ) : (
