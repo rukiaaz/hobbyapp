@@ -33,7 +33,7 @@ src/
 - Cloudinary-backed post photo/video uploads through a modal composer
 - Searchable Explore view with hobby trends and live + mock posts
 - Hash-routed Home, Explore, Create, Messages, and Profile navigation
-- User-to-user Firestore chat messages
+- User-to-user Firestore chat messages with image attachments, profile peek, and local-only nicknames
 - Responsive Instagram-inspired feed UI
 - Mock fallback posts for scaffold/demo content
 
@@ -90,7 +90,7 @@ If a friend sees a Firebase/API error after cloning, check these first:
 - `auth/operation-not-allowed`: enable Email/Password and Google in **Authentication → Sign-in method**.
 - `auth/unauthorized-domain`: add the local/deployed domain in **Authentication → Settings → Authorized domains**.
 - Firestore permission errors: create Firestore and paste the rules below.
-- Cloudinary upload errors: add `VITE_CLOUDINARY_CLOUD_NAME` and `VITE_CLOUDINARY_UPLOAD_PRESET` to `.env.local`; for videos, make sure your unsigned preset allows video/auto uploads.
+- Cloudinary upload errors: add `VITE_CLOUDINARY_CLOUD_NAME` and `VITE_CLOUDINARY_UPLOAD_PRESET` to `.env.local`; for post videos, make sure your unsigned preset allows video/auto uploads. Chat pictures use the same Cloudinary config.
 
 ## Firestore rules
 

@@ -74,6 +74,7 @@ Create a dedicated home feed structure that keeps the app scaffold simple while 
 - [x] Add compact “post something” composer that opens a photo/video modal.
 - [x] Add shared live post listener for Home and Explore.
 - [x] Add profile editing and password reset UX.
+- [x] Redesign Messages into vertical thread list + detail view with image messages, profile peek, local nicknames, and back navigation.
 - [ ] Add mock loading skeletons if desired.
 
 ### Phase 4 — Future app expansion

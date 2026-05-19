@@ -7,8 +7,20 @@ import {
   query,
   serverTimestamp,
   setDoc,
+  where,
 } from 'firebase/firestore';
 import { db } from './firebase.js';
+
+const cloudinaryConfig = {
+  cloudName: import.meta.env.VITE_CLOUDINARY_CLOUD_NAME,
+  uploadPreset: import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET,
+};
+
+function createServiceError(code, message) {
+  const error = new Error(message);
+  error.code = code;
+  return error;
+}
 
 function getChatId(firstUserId, secondUserId) {
   return [firstUserId, secondUserId].sort().join('__');
@@ -55,6 +67,56 @@ function getParticipantSummary(profile) {
   };
 }
 
+async function uploadChatImage(imageFile) {
+  if (!imageFile) {
+    return { imagePublicId: '', imageUrl: '' };
+  }
+
+  if (!cloudinaryConfig.cloudName || !cloudinaryConfig.uploadPreset) {
+    throw createServiceError(
+      'cloudinary/not-configured',
+      'Cloudinary cloud name and unsigned upload preset are required for chat photos.',
+    );
+  }
+
+  const formData = new FormData();
+  formData.append('file', imageFile);
+  formData.append('upload_preset', cloudinaryConfig.uploadPreset);
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/image/upload`,
+    {
+      method: 'POST',
+      body: formData,
+    },
+  );
+
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw createServiceError(
+      'cloudinary/upload-failed',
+      result?.error?.message || 'Cloudinary chat image upload failed.',
+    );
+  }
+
+  return {
+    imagePublicId: result.public_id,
+    imageUrl: result.secure_url,
+  };
+}
+
+function normalizeMessageInput(messageInput) {
+  if (typeof messageInput === 'string') {
+    return { imageFile: null, text: messageInput };
+  }
+
+  return {
+    imageFile: messageInput?.imageFile ?? null,
+    text: messageInput?.text ?? '',
+  };
+}
+
 export async function ensureChat(currentUser, currentProfile, recipientProfile) {
   const chatId = getChatId(currentUser.uid, recipientProfile.uid);
   const participantProfiles = {
@@ -67,9 +129,44 @@ export async function ensureChat(currentUser, currentProfile, recipientProfile) 
     {
       participants: [currentUser.uid, recipientProfile.uid],
       participantProfiles,
-      updatedAt: serverTimestamp(),
     },
     { merge: true },
+  );
+}
+
+export function listenToUserChats(currentUserId, onChange, onError) {
+  if (!currentUserId) {
+    onChange([]);
+    return () => {};
+  }
+
+  const chatsQuery = query(collection(db, 'chats'), where('participants', 'array-contains', currentUserId));
+
+  return onSnapshot(
+    chatsQuery,
+    (snapshot) => {
+      const chats = snapshot.docs
+        .map((chatDocument) => {
+          const data = chatDocument.data();
+          const hasLastMessage = Boolean(data.lastMessage);
+          const lastMessageDate = hasLastMessage ? getDateFromTimestamp(data.lastMessageAt || data.updatedAt) : null;
+
+          return {
+            id: chatDocument.id,
+            lastMessage: data.lastMessage || '',
+            lastMessageAt: lastMessageDate,
+            lastMessageSenderId: data.lastMessageSenderId || '',
+            lastMessageTimeAgo: hasLastMessage ? getTimeAgo(lastMessageDate) : '',
+            participants: data.participants || [],
+            participantProfiles: data.participantProfiles || {},
+            updatedAt: lastMessageDate,
+          };
+        })
+        .sort((first, second) => (second.updatedAt?.getTime() ?? 0) - (first.updatedAt?.getTime() ?? 0));
+
+      onChange(chats);
+    },
+    onError,
   );
 }
 
@@ -90,10 +187,14 @@ export function listenToMessages(currentUserId, otherUserId, onChange, onError) 
         return {
           id: messageDocument.id,
           senderId: data.senderId,
-          text: data.text,
+          recipientId: data.recipientId,
+          text: data.text || '',
           creator: data.creator,
           handle: data.handle,
           avatar: data.avatar,
+          imagePublicId: data.imagePublicId || '',
+          imageUrl: data.imageUrl || '',
+          mediaType: data.mediaType || '',
           timeAgo: getTimeAgo(getDateFromTimestamp(data.createdAt)),
         };
       });
@@ -104,22 +205,25 @@ export function listenToMessages(currentUserId, otherUserId, onChange, onError) 
   );
 }
 
-export async function sendMessage(currentUser, currentProfile, recipientProfile, text) {
+export async function sendMessage(currentUser, currentProfile, recipientProfile, messageInput) {
+  const { imageFile, text } = normalizeMessageInput(messageInput);
   const trimmedText = text.trim();
 
-  if (!trimmedText) {
+  if (!trimmedText && !imageFile) {
     return;
   }
 
+  const { imagePublicId, imageUrl } = await uploadChatImage(imageFile);
   const chatId = getChatId(currentUser.uid, recipientProfile.uid);
   const chatRef = doc(db, 'chats', chatId);
+  const lastMessage = trimmedText || '📷 Photo';
 
   await ensureChat(currentUser, currentProfile, recipientProfile);
 
   await setDoc(
     chatRef,
     {
-      lastMessage: trimmedText,
+      lastMessage,
       lastMessageSenderId: currentUser.uid,
       lastMessageAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
@@ -134,6 +238,9 @@ export async function sendMessage(currentUser, currentProfile, recipientProfile,
     handle: currentProfile.handle,
     avatar: currentProfile.avatar,
     text: trimmedText,
+    imagePublicId,
+    imageUrl,
+    mediaType: imageUrl ? 'image' : '',
     createdAt: serverTimestamp(),
   });
 }
