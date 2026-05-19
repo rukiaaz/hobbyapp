@@ -5,6 +5,14 @@ function getAvatarLabel(post) {
   return post.avatar || post.creator.slice(0, 1);
 }
 
+function getPostMediaUrl(post) {
+  return post.mediaUrl || post.imageUrl || '';
+}
+
+function isVideoPost(post) {
+  return post.mediaType === 'video' || post.mediaResourceType === 'video';
+}
+
 export default function PostCard({ currentUser, onAddComment, onShare, onToggleLike, post, profile }) {
   const [commentError, setCommentError] = useState('');
   const [commentText, setCommentText] = useState('');
@@ -57,6 +65,9 @@ export default function PostCard({ currentUser, onAddComment, onShare, onToggleL
     }
   }
 
+  const mediaUrl = getPostMediaUrl(post);
+  const isVideo = isVideoPost(post);
+
   return (
     <article className={`feed-card ${post.isLive ? 'is-live' : 'is-demo'}`} id={`post-${post.id}`}>
       <header className="feed-header">
@@ -77,9 +88,13 @@ export default function PostCard({ currentUser, onAddComment, onShare, onToggleL
         </button>
       </header>
 
-      <div className="feed-media">
-        {post.imageUrl ? (
-          <img alt={post.imageAlt || post.title} src={post.imageUrl} />
+      <div className={`feed-media ${isVideo ? 'has-video' : ''}`}>
+        {mediaUrl ? (
+          isVideo ? (
+            <video controls playsInline preload="metadata" src={mediaUrl} />
+          ) : (
+            <img alt={post.imageAlt || post.title} src={mediaUrl} />
+          )
         ) : (
           <div className={`feed-art ${post.imageClass}`} role="img" aria-label={post.imageAlt || post.title} />
         )}

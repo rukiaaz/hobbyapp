@@ -67,18 +67,22 @@ Create a dedicated home feed structure that keeps the app scaffold simple while 
 
 ### Phase 3 — Interactive frontend enhancements
 
-- Add client-side filtering by hobby category.
-- Add simple like/save UI state.
-- Add empty states for categories with no posts.
-- Add mock loading skeletons if desired.
+- [x] Add client-side filtering by hobby category.
+- [x] Add simple like/save UI state.
+- [x] Add empty states for categories with no posts.
+- [x] Add searchable Explore view with hobby trend cards.
+- [x] Add compact “post something” composer that opens a photo/video modal.
+- [x] Add shared live post listener for Home and Explore.
+- [x] Add profile editing and password reset UX.
+- [ ] Add mock loading skeletons if desired.
 
 ### Phase 4 — Future app expansion
 
-- Add routing for Home, Explore, Create, and Profile pages.
-- Replace mock data with API calls.
-- Add authentication and real user profiles.
-- Add upload/create post flow.
-- Add comments and follow/unfollow interactions.
+- [x] Add hash routing for Home, Explore, Create, Messages, and Profile pages.
+- [x] Replace core mock-only flows with Firebase Auth, Firestore, and Cloudinary integrations.
+- [x] Add authentication and real user profiles.
+- [x] Add upload/create post flow.
+- [x] Add comments and follow/unfollow interactions.
 
 ## Verification
 

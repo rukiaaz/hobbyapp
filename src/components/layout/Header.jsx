@@ -15,7 +15,10 @@ export default function Header({
   currentUser,
   isAuthenticated = false,
   onNavigate,
+  onSearchChange,
+  onSearchFocus,
   onSignOut,
+  searchQuery = '',
   vibelyProfile,
 }) {
   const userLabel = getUserLabel(currentUser, vibelyProfile);
@@ -39,7 +42,14 @@ export default function Header({
       {isAuthenticated ? (
         <label className="search-box">
           <span className="sr-only">Search hobbies, makers, or posts</span>
-          <input disabled={activeView === 'onboarding'} type="search" placeholder="Search hobbies" />
+          <input
+            disabled={activeView === 'onboarding'}
+            onChange={(event) => onSearchChange?.(event.target.value)}
+            onFocus={onSearchFocus}
+            placeholder="Search hobbies, makers, posts"
+            type="search"
+            value={searchQuery}
+          />
         </label>
       ) : (
         <p className="header-helper">Sign in to unlock your hobby feed.</p>
@@ -55,6 +65,38 @@ export default function Header({
               type="button"
             >
               Home
+            </button>
+            <button
+              className={`desktop-nav-button ${activeView === 'explore' ? 'active' : ''}`}
+              disabled={activeView === 'onboarding'}
+              onClick={() => navigateTo('explore')}
+              type="button"
+            >
+              Explore
+            </button>
+            <button
+              className={`desktop-nav-button ${activeView === 'create' ? 'active' : ''}`}
+              disabled={activeView === 'onboarding'}
+              onClick={() => navigateTo('create')}
+              type="button"
+            >
+              Create
+            </button>
+            <button
+              className={`desktop-nav-button ${activeView === 'messages' ? 'active' : ''}`}
+              disabled={activeView === 'onboarding'}
+              onClick={() => navigateTo('messages')}
+              type="button"
+            >
+              Messages
+            </button>
+            <button
+              className={`desktop-nav-button ${activeView === 'profile' ? 'active' : ''}`}
+              disabled={activeView === 'onboarding'}
+              onClick={() => navigateTo('profile')}
+              type="button"
+            >
+              Profile
             </button>
             <span className="user-chip" title={userLabel}>
               {activeView === 'onboarding' ? 'Create Vibely profile' : userLabel}

@@ -1,26 +1,22 @@
 const items = [
   { label: 'Home', icon: '⌂', view: 'home' },
-  // No search view exists in App routing right now. Keep the UI, but make it non-interactive.
-  { label: 'Search', icon: '⌕', view: null },
-  { label: 'Create', icon: '+' },
-  { label: 'Hobbies', icon: '✦' },
-  { label: 'Profile', icon: '◉' },
+  { label: 'Explore', icon: '⌕', view: 'explore' },
+  { label: 'Create', icon: '+', view: 'create' },
+  { label: 'Messages', icon: '✉', view: 'messages' },
+  { label: 'Profile', icon: '◉', view: 'profile' },
 ];
 
-export default function BottomNav({ activeItem = 'Home', onNavigate }) {
+export default function BottomNav({ activeView = 'home', onNavigate }) {
   return (
     <nav className="bottom-nav" aria-label="Mobile navigation">
       {items.map((item) => {
-        const isActive = item.label === activeItem;
-        const isDisabled = !item.view;
+        const isActive = item.view === activeView;
 
         return (
           <button
             className={isActive ? 'active' : ''}
-            disabled={isDisabled}
-            aria-disabled={isDisabled}
             key={item.label}
-            onClick={() => !isDisabled && onNavigate?.(item.view)}
+            onClick={() => onNavigate?.(item.view)}
             type="button"
             aria-label={item.label}
           >

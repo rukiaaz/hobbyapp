@@ -29,7 +29,15 @@ export default function VibelyOnboarding({ errorMessage = '', onComplete, onSign
     event.preventDefault();
 
     const formData = new FormData(event.currentTarget);
+    const displayName = formData.get('displayName').trim();
     const username = formData.get('username').trim().replace(/^@+/, '').toLowerCase();
+    const mainHobby = formData.get('mainHobby').trim();
+    const bio = formData.get('bio').trim();
+
+    if (!displayName || !mainHobby || !bio) {
+      setError('Display name, main hobby, and bio cannot be blank.');
+      return;
+    }
 
     if (!/^[a-z0-9_]{3,20}$/.test(username)) {
       setError('Username must be 3-20 characters and can only use lowercase letters, numbers, and underscores.');
@@ -38,10 +46,10 @@ export default function VibelyOnboarding({ errorMessage = '', onComplete, onSign
 
     setError('');
     onComplete?.({
-      displayName: formData.get('displayName'),
+      displayName,
       username,
-      mainHobby: formData.get('mainHobby'),
-      bio: formData.get('bio'),
+      mainHobby,
+      bio,
     });
   }
 

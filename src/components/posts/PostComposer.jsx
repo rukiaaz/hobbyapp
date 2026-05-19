@@ -1,128 +1,229 @@
 import { useEffect, useState } from 'react';
 
+function getMediaKind(file) {
+  if (!file) {
+    return '';
+  }
+
+  return file.type.startsWith('video/') ? 'video' : 'image';
+}
+
 export default function PostComposer({ categories, isSubmitting = false, onCreatePost, profile }) {
   const [caption, setCaption] = useState('');
   const [categoryId, setCategoryId] = useState(categories[1]?.id ?? 'crafts');
   const [hobby, setHobby] = useState(profile?.mainHobby ?? '');
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [mediaFile, setMediaFile] = useState(null);
+  const [mediaPreview, setMediaPreview] = useState('');
   const [title, setTitle] = useState('');
 
+  const mediaKind = getMediaKind(mediaFile);
+
   useEffect(() => {
-    if (!imageFile) {
-      setImagePreview('');
+    if (!mediaFile) {
+      setMediaPreview('');
       return undefined;
     }
 
-    const previewUrl = URL.createObjectURL(imageFile);
-    setImagePreview(previewUrl);
+    const previewUrl = URL.createObjectURL(mediaFile);
+    setMediaPreview(previewUrl);
 
     return () => URL.revokeObjectURL(previewUrl);
-  }, [imageFile]);
+  }, [mediaFile]);
 
-  function handleSubmit(event) {
+  useEffect(() => {
+    if (!isModalOpen) {
+      return undefined;
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === 'Escape' && !isSubmitting) {
+        closeComposer();
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isModalOpen, isSubmitting]);
+
+  function clearDraft() {
+    setCaption('');
+    setHobby(profile?.mainHobby ?? '');
+    setMediaFile(null);
+    setTitle('');
+  }
+
+  function closeComposer() {
+    clearDraft();
+    setIsModalOpen(false);
+  }
+
+  function resetForm(form) {
+    clearDraft();
+    form.reset();
+  }
+
+  async function handleSubmit(event) {
     event.preventDefault();
 
-    onCreatePost?.({
+    const form = event.currentTarget;
+    const didCreate = await onCreatePost?.({
       caption,
       categoryId,
       hobby,
-      imageFile,
+      mediaFile,
       title,
     });
 
-    setCaption('');
-    setHobby(profile?.mainHobby ?? '');
-    setImageFile(null);
-    setTitle('');
-    event.currentTarget.reset();
+    if (didCreate === false) {
+      return;
+    }
+
+    resetForm(form);
+    setIsModalOpen(false);
   }
 
   return (
-    <section className="post-composer" aria-labelledby="post-composer-title">
-      <div className="composer-intro">
-        <p className="eyebrow">Create post</p>
-        <h2 id="post-composer-title">Share a hobby update</h2>
-        <p>Drop in a photo, choose a hobby category, and publish a polished update to the feed.</p>
-      </div>
-
-      <form className="composer-form" onSubmit={handleSubmit}>
-        <label className="auth-field" htmlFor="post-title">
-          <span>Post title</span>
-          <input
-            id="post-title"
-            maxLength="80"
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="Today&apos;s pottery wheel practice"
-            required
-          />
-        </label>
-
-        <div className="composer-grid">
-          <label className="auth-field" htmlFor="post-category">
-            <span>Category</span>
-            <select
-              id="post-category"
-              onChange={(event) => setCategoryId(event.target.value)}
-              value={categoryId}
-            >
-              {categories
-                .filter((category) => category.id !== 'all')
-                .map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.label}
-                  </option>
-                ))}
-            </select>
-          </label>
-
-          <label className="auth-field" htmlFor="post-hobby">
-            <span>Hobby</span>
-            <input
-              id="post-hobby"
-              maxLength="40"
-              onChange={(event) => setHobby(event.target.value)}
-              placeholder="Ceramics"
-              required
-              value={hobby}
-            />
-          </label>
+    <>
+      <section className="post-composer post-composer-compact" aria-label="Create a post">
+        <div className="mini-avatar" aria-hidden="true">
+          {profile?.avatar || profile?.displayName?.slice(0, 1) || 'H'}
         </div>
-
-        <label className="auth-field" htmlFor="post-caption">
-          <span>Caption</span>
-          <textarea
-            id="post-caption"
-            maxLength="240"
-            onChange={(event) => setCaption(event.target.value)}
-            placeholder="What did you make, learn, or try today?"
-            required
-            rows="3"
-          />
-        </label>
-
-        <label className="upload-dropzone" htmlFor="post-photo">
-          <input
-            accept="image/*"
-            id="post-photo"
-            onChange={(event) => setImageFile(event.target.files?.[0] ?? null)}
-            type="file"
-          />
-          {imagePreview ? (
-            <img alt="Selected post preview" src={imagePreview} />
-          ) : (
-            <span className="upload-placeholder">
-              <span aria-hidden="true">📷</span>
-              <strong>Upload a photo</strong>
-              <small>Tap to choose media from your device</small>
-            </span>
-          )}
-        </label>
-
-        <button className="auth-submit" disabled={isSubmitting} type="submit">
-          {isSubmitting ? 'Posting...' : 'Post to feed'}
+        <button className="composer-trigger" onClick={() => setIsModalOpen(true)} type="button">
+          Post something about {profile?.mainHobby || 'your hobby'}...
         </button>
-      </form>
-    </section>
+        <button
+          className="composer-media-shortcut"
+          onClick={() => setIsModalOpen(true)}
+          type="button"
+          aria-label="Create a photo or video post"
+        >
+          📷
+        </button>
+      </section>
+
+      {isModalOpen && (
+        <div
+          className="composer-modal-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isSubmitting) {
+              closeComposer();
+            }
+          }}
+        >
+          <section
+            className="post-composer composer-modal"
+            role="dialog"
+            aria-labelledby="post-composer-title"
+            aria-modal="true"
+          >
+            <div className="composer-modal-header">
+              <div>
+                <p className="eyebrow">Create post</p>
+                <h2 id="post-composer-title">Share a hobby update</h2>
+                <p>Write the update first, then add a photo or video from your device.</p>
+              </div>
+              <button
+                className="more-button"
+                disabled={isSubmitting}
+                onClick={closeComposer}
+                type="button"
+                aria-label="Close post composer"
+              >
+                ×
+              </button>
+            </div>
+
+            <form className="composer-form composer-modal-form" onSubmit={handleSubmit}>
+              <label className="auth-field" htmlFor="post-title">
+                <span>Post title</span>
+                <input
+                  id="post-title"
+                  maxLength="80"
+                  onChange={(event) => setTitle(event.target.value)}
+                  placeholder="Today&apos;s pottery wheel practice"
+                  required
+                  value={title}
+                />
+              </label>
+
+              <div className="composer-grid">
+                <label className="auth-field" htmlFor="post-category">
+                  <span>Category</span>
+                  <select
+                    id="post-category"
+                    onChange={(event) => setCategoryId(event.target.value)}
+                    value={categoryId}
+                  >
+                    {categories
+                      .filter((category) => category.id !== 'all')
+                      .map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.label}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+
+                <label className="auth-field" htmlFor="post-hobby">
+                  <span>Hobby</span>
+                  <input
+                    id="post-hobby"
+                    maxLength="40"
+                    onChange={(event) => setHobby(event.target.value)}
+                    placeholder="Ceramics"
+                    required
+                    value={hobby}
+                  />
+                </label>
+              </div>
+
+              <label className="auth-field" htmlFor="post-caption">
+                <span>Caption</span>
+                <textarea
+                  id="post-caption"
+                  maxLength="240"
+                  onChange={(event) => setCaption(event.target.value)}
+                  placeholder="What did you make, learn, or try today?"
+                  required
+                  rows="3"
+                  value={caption}
+                />
+              </label>
+
+              <div className={`upload-dropzone ${mediaPreview ? 'has-preview' : ''}`}>
+                <input
+                  accept="image/*,video/*"
+                  id="post-media"
+                  onChange={(event) => setMediaFile(event.target.files?.[0] ?? null)}
+                  type="file"
+                />
+                {mediaPreview && (
+                  mediaKind === 'video' ? (
+                    <video controls playsInline preload="metadata" src={mediaPreview} />
+                  ) : (
+                    <img alt="Selected post preview" src={mediaPreview} />
+                  )
+                )}
+                <label className={mediaPreview ? 'media-change-button' : 'upload-placeholder'} htmlFor="post-media">
+                  <span aria-hidden="true">{mediaPreview ? '↻' : '＋'}</span>
+                  <strong>{mediaPreview ? 'Change media' : 'Add photo or video'}</strong>
+                  {!mediaPreview && <small>Tap the icon to choose media from your device</small>}
+                </label>
+              </div>
+
+              <div className="composer-modal-actions">
+                <button className="text-button" disabled={isSubmitting} onClick={closeComposer} type="button">
+                  Cancel
+                </button>
+                <button className="auth-submit" disabled={isSubmitting} type="submit">
+                  {isSubmitting ? 'Posting...' : 'Post to feed'}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+    </>
   );
 }

@@ -53,24 +53,31 @@ function getDateFromTimestamp(timestamp) {
   return timestamp?.toDate ? timestamp.toDate() : null;
 }
 
-async function uploadPostImage(imageFile) {
-  if (!imageFile) {
-    return { imagePublicId: '', imageUrl: '' };
+async function uploadPostMedia(mediaFile) {
+  if (!mediaFile) {
+    return {
+      imagePublicId: '',
+      imageUrl: '',
+      mediaPublicId: '',
+      mediaResourceType: '',
+      mediaType: '',
+      mediaUrl: '',
+    };
   }
 
   if (!cloudinaryConfig.cloudName || !cloudinaryConfig.uploadPreset) {
     throw createServiceError(
       'cloudinary/not-configured',
-      'Cloudinary cloud name and unsigned upload preset are required for photo uploads.',
+      'Cloudinary cloud name and unsigned upload preset are required for photo/video uploads.',
     );
   }
 
   const formData = new FormData();
-  formData.append('file', imageFile);
+  formData.append('file', mediaFile);
   formData.append('upload_preset', cloudinaryConfig.uploadPreset);
 
   const response = await fetch(
-    `https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/image/upload`,
+    `https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/auto/upload`,
     {
       method: 'POST',
       body: formData,
@@ -86,9 +93,15 @@ async function uploadPostImage(imageFile) {
     );
   }
 
+  const mediaType = result.resource_type === 'video' ? 'video' : 'image';
+
   return {
     imagePublicId: result.public_id,
     imageUrl: result.secure_url,
+    mediaPublicId: result.public_id,
+    mediaResourceType: result.resource_type,
+    mediaType,
+    mediaUrl: result.secure_url,
   };
 }
 
@@ -111,9 +124,13 @@ async function mapPostDocument(postDocument, currentUserId) {
     title: data.title,
     caption: data.caption,
     imageClass: data.imageClass || 'gradient-userpost',
-    imagePath: data.imagePublicId || data.imagePath || '',
-    imagePublicId: data.imagePublicId || '',
-    imageUrl: data.imageUrl || '',
+    imagePath: data.mediaPublicId || data.imagePublicId || data.imagePath || '',
+    imagePublicId: data.imagePublicId || data.mediaPublicId || '',
+    imageUrl: data.imageUrl || data.mediaUrl || '',
+    mediaPublicId: data.mediaPublicId || data.imagePublicId || '',
+    mediaResourceType: data.mediaResourceType || '',
+    mediaType: data.mediaType || (data.mediaResourceType === 'video' ? 'video' : data.mediaUrl || data.imageUrl ? 'image' : ''),
+    mediaUrl: data.mediaUrl || data.imageUrl || '',
     likesCount: data.likesCount ?? 0,
     commentsCount: data.commentsCount ?? 0,
     shareCount: data.shareCount ?? 0,
@@ -138,7 +155,7 @@ export function listenToPosts(currentUserId, onChange, onError) {
 }
 
 export async function createPost(user, profile, postData) {
-  const { imagePublicId, imageUrl } = await uploadPostImage(postData.imageFile);
+  const mediaUpload = await uploadPostMedia(postData.mediaFile ?? postData.imageFile);
 
   return addDoc(collection(db, 'posts'), {
     authorId: user.uid,
@@ -150,8 +167,12 @@ export async function createPost(user, profile, postData) {
     title: postData.title.trim(),
     caption: postData.caption.trim(),
     imageClass: 'gradient-userpost',
-    imagePublicId,
-    imageUrl,
+    imagePublicId: mediaUpload.imagePublicId,
+    imageUrl: mediaUpload.imageUrl,
+    mediaPublicId: mediaUpload.mediaPublicId,
+    mediaResourceType: mediaUpload.mediaResourceType,
+    mediaType: mediaUpload.mediaType,
+    mediaUrl: mediaUpload.mediaUrl,
     likesCount: 0,
     commentsCount: 0,
     shareCount: 0,

@@ -1,12 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import HobbyTabs from '../hobbies/HobbyTabs.jsx';
 import PostCard from '../posts/PostCard.jsx';
 import PostComposer from '../posts/PostComposer.jsx';
 import {
   addPostComment,
   createLocalComment,
-  createPost,
-  listenToPosts,
   recordPostShare,
   togglePostLike,
 } from '../../services/posts.js';
@@ -40,27 +38,18 @@ async function sharePost(post) {
   await navigator.clipboard.writeText(shareUrl);
 }
 
-export default function HomeFeed({ categories, currentUser, posts, profile }) {
+export default function HomeFeed({
+  categories,
+  currentUser,
+  feedError = '',
+  isCreatingPost = false,
+  livePosts = [],
+  onCreatePost,
+  posts,
+  profile,
+}) {
   const [activeCategoryId, setActiveCategoryId] = useState('all');
-  const [feedError, setFeedError] = useState('');
-  const [isCreatingPost, setIsCreatingPost] = useState(false);
-  const [livePosts, setLivePosts] = useState([]);
   const [localInteractions, setLocalInteractions] = useState({});
-
-  useEffect(() => {
-    if (!currentUser?.uid) {
-      setLivePosts([]);
-      return undefined;
-    }
-
-    const unsubscribe = listenToPosts(
-      currentUser.uid,
-      setLivePosts,
-      (error) => setFeedError(`Could not load live posts. Check Firestore rules. (${error.code ?? 'unknown-error'})`),
-    );
-
-    return unsubscribe;
-  }, [currentUser?.uid]);
 
   const mockPosts = useMemo(
     () => posts.map((post) => toMockFeedPost(post, localInteractions[`mock-${post.id}`])),
@@ -68,7 +57,10 @@ export default function HomeFeed({ categories, currentUser, posts, profile }) {
   );
 
   const allPosts = useMemo(() => [...livePosts, ...mockPosts], [livePosts, mockPosts]);
-  const heroPosts = useMemo(() => allPosts.filter((post) => post.imageUrl).slice(0, 3), [allPosts]);
+  const heroPosts = useMemo(
+    () => allPosts.filter((post) => (post.mediaUrl || post.imageUrl) && post.mediaType !== 'video').slice(0, 3),
+    [allPosts],
+  );
   const totalEngagement = useMemo(
     () => allPosts.reduce((total, post) => total + (post.likesCount ?? 0) + (post.commentsCount ?? 0), 0),
     [allPosts],
@@ -85,18 +77,7 @@ export default function HomeFeed({ categories, currentUser, posts, profile }) {
   }, [activeCategoryId, allPosts]);
 
   async function handleCreatePost(postData) {
-    setFeedError('');
-    setIsCreatingPost(true);
-
-    try {
-      await createPost(currentUser, profile, postData);
-    } catch (error) {
-      setFeedError(
-        `Could not create post. Check Firestore rules and Cloudinary env settings. (${error.code ?? 'unknown-error'})`,
-      );
-    } finally {
-      setIsCreatingPost(false);
-    }
+    return onCreatePost?.(postData);
   }
 
   async function handleToggleLike(post) {
@@ -181,7 +162,7 @@ export default function HomeFeed({ categories, currentUser, posts, profile }) {
         <div className="hero-media-stack" aria-hidden="true">
           {heroPosts.map((post, index) => (
             <article className="hero-photo-card" key={post.id} style={{ '--card-index': index }}>
-              <img alt="" src={post.imageUrl} />
+              <img alt="" src={post.mediaUrl || post.imageUrl} />
               <span>{post.hobby}</span>
             </article>
           ))}

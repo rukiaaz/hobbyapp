@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import {
   createUserWithEmailAndPassword,
   sendEmailVerification,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -34,6 +35,7 @@ function getFriendlyAuthError(error) {
     'auth/popup-blocked': 'The Google sign-in popup was blocked. Allow popups for this site and try again.',
     'auth/popup-closed-by-user': 'The Google sign-in popup was closed before completing sign-in.',
     'auth/too-many-requests': 'Too many attempts. Wait a moment and try again.',
+    'auth/user-not-found': 'No account exists for that email yet. Try signing up instead.',
     'auth/unauthorized-domain':
       'This domain is not authorized in Firebase Authentication settings. Add localhost or your deployed domain in Authorized domains.',
     'auth/weak-password': 'Password should be at least 6 characters.',
@@ -120,6 +122,19 @@ export default function AuthPage({ initialMessage = '', mode = 'login', onComple
       setStatusMessage(
         'Account created. We sent a verification email. Verify it first, then log in to continue.',
       );
+      return null;
+    }, 'Firebase is not configured. Add your keys to .env.local and restart the dev server.');
+  }
+
+  async function handlePasswordReset(email) {
+    if (!email) {
+      setStatusMessage('Enter your email first, then tap Forgot password again.');
+      return;
+    }
+
+    await runAuthAction(async () => {
+      await sendPasswordResetEmail(auth, email);
+      setStatusMessage('Password reset email sent. Check your inbox and spam folder.');
       return null;
     }, 'Firebase is not configured. Add your keys to .env.local and restart the dev server.');
   }
@@ -221,6 +236,7 @@ export default function AuthPage({ initialMessage = '', mode = 'login', onComple
         ) : (
           <LoginForm
             isLoading={isLoading}
+            onForgotPassword={handlePasswordReset}
             onSubmit={handleLogin}
             onSwitchMode={() => onModeChange?.('signup')}
             statusMessage={statusMessage}

@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import AuthInput from './AuthInput.jsx';
 
-export default function LoginForm({ isLoading = false, onSubmit, onSwitchMode, statusMessage }) {
+export default function LoginForm({ isLoading = false, onForgotPassword, onSubmit, onSwitchMode, statusMessage }) {
+  const [email, setEmail] = useState('');
   function handleSubmit(event) {
     event.preventDefault();
 
@@ -18,9 +20,11 @@ export default function LoginForm({ isLoading = false, onSubmit, onSwitchMode, s
         id="login-email"
         label="Email"
         name="email"
+        onChange={(event) => setEmail(event.target.value)}
         placeholder="avery@example.com"
         required
         type="email"
+        value={email}
       />
 
       <AuthInput
@@ -39,7 +43,7 @@ export default function LoginForm({ isLoading = false, onSubmit, onSwitchMode, s
           <input type="checkbox" />
           <span>Remember me</span>
         </label>
-        <button className="text-button" type="button">
+        <button className="text-button" onClick={() => onForgotPassword?.(email)} type="button">
           Forgot password?
         </button>
       </div>

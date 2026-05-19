@@ -12,7 +12,7 @@ function Stat({ label, value }) {
   );
 }
 
-export default function ProfileHeader({ profile }) {
+export default function ProfileHeader({ editButtonLabel = 'Edit Profile', onEditProfile, profile, showEditButton = true }) {
   return (
     <section className="profile-card">
       <div className="profile-cover" />
@@ -28,9 +28,11 @@ export default function ProfileHeader({ profile }) {
               <h1>{profile.name}</h1>
               <p className="muted">{profile.username} · {profile.location}</p>
             </div>
-            <button className="edit-profile-button" type="button">
-              Edit Profile
-            </button>
+            {showEditButton && (
+              <button className="edit-profile-button" onClick={onEditProfile} type="button">
+                {editButtonLabel}
+              </button>
+            )}
           </div>
           <p>{profile.bio}</p>
 

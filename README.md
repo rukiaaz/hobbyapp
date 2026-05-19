@@ -9,6 +9,7 @@ src/
   components/
     auth/          Login and sign up screens
     chat/          User-to-user messaging UI
+    explore/       Search and discovery screen
     feed/          Home feed composition and filtering
     hobbies/       Hobby filters and discovery components
     layout/        App shell navigation components
@@ -25,11 +26,13 @@ src/
 
 ## Features
 
-- Firebase Email/Password authentication with required email verification, plus Google authentication
-- Post-login Vibely profile creation
+- Firebase Email/Password authentication with required email verification, Google authentication, and password reset email flow
+- Post-login Vibely profile creation and profile editing
 - Firestore-backed user profiles
 - Firestore-backed posts, likes, comments, and shares
-- Cloudinary-backed post photo uploads
+- Cloudinary-backed post photo/video uploads through a modal composer
+- Searchable Explore view with hobby trends and live + mock posts
+- Hash-routed Home, Explore, Create, Messages, and Profile navigation
 - User-to-user Firestore chat messages
 - Responsive Instagram-inspired feed UI
 - Mock fallback posts for scaffold/demo content
@@ -87,7 +90,7 @@ If a friend sees a Firebase/API error after cloning, check these first:
 - `auth/operation-not-allowed`: enable Email/Password and Google in **Authentication → Sign-in method**.
 - `auth/unauthorized-domain`: add the local/deployed domain in **Authentication → Settings → Authorized domains**.
 - Firestore permission errors: create Firestore and paste the rules below.
-- Cloudinary upload errors: add `VITE_CLOUDINARY_CLOUD_NAME` and `VITE_CLOUDINARY_UPLOAD_PRESET` to `.env.local`.
+- Cloudinary upload errors: add `VITE_CLOUDINARY_CLOUD_NAME` and `VITE_CLOUDINARY_UPLOAD_PRESET` to `.env.local`; for videos, make sure your unsigned preset allows video/auto uploads.
 
 ## Firestore rules
 
@@ -155,7 +158,7 @@ service cloud.firestore {
 
 ## Cloudinary setup
 
-Firebase Storage is not required. Image uploads use Cloudinary unsigned uploads.
+Firebase Storage is not required. Post media uploads use Cloudinary unsigned uploads through the `auto/upload` endpoint so photos and short videos can share one flow.
 
 1. Create/login to Cloudinary.
 2. Go to **Settings → Upload → Upload presets**.
@@ -170,6 +173,18 @@ VITE_CLOUDINARY_UPLOAD_PRESET=your-unsigned-upload-preset
 ```
 
 Restart the dev server after editing `.env.local`.
+
+## App routes
+
+Signed-in navigation uses hash routes so links survive refreshes and can be shared during local/dev hosting:
+
+```txt
+/#/home
+/#/explore
+/#/create
+/#/messages
+/#/profile
+```
 
 ## Run
 
