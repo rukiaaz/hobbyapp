@@ -33,9 +33,12 @@ export default function ExploreView({
   isLoading = false,
   livePosts = [],
   onOpenHobby,
+  onRemoveSearchHistory,
   onSearchChange,
+  onSearchCommit,
   onViewProfile,
   posts,
+  searchHistory = [],
   searchQuery = '',
   userProfiles = [],
 }) {
@@ -88,17 +91,40 @@ export default function ExploreView({
           the hobby community.
         </p>
 
-        <label className="explore-search" htmlFor="explore-search-input">
-          <span className="sr-only">Search posts and hobbies</span>
-          <input
-            id="explore-search-input"
-            onChange={(event) => onSearchChange?.(event.target.value)}
-            placeholder="Try ceramics, bouldering, baking..."
-            type="search"
-            value={searchQuery}
-          />
-        </label>
+        <form
+          className="explore-search-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSearchCommit?.(searchQuery);
+          }}
+        >
+          <label className="explore-search" htmlFor="explore-search-input">
+            <span className="sr-only">Search posts and hobbies</span>
+            <input
+              id="explore-search-input"
+              onBlur={() => onSearchCommit?.(searchQuery)}
+              onChange={(event) => onSearchChange?.(event.target.value)}
+              placeholder="Try ceramics, bouldering, baking..."
+              type="search"
+              value={searchQuery}
+            />
+          </label>
+        </form>
       </div>
+
+      {searchHistory.length > 0 && (
+        <section className="search-history-strip" aria-label="Recent searches">
+          <span>Recent</span>
+          {searchHistory.slice(0, 6).map((term) => (
+            <span className="history-chip" key={term}>
+              <button onClick={() => { onSearchChange?.(term); onSearchCommit?.(term); }} type="button">
+                {term}
+              </button>
+              <button onClick={() => onRemoveSearchHistory?.(term)} type="button" aria-label={`Remove ${term} from search history`}>×</button>
+            </span>
+          ))}
+        </section>
+      )}
 
       <div className="filter-switcher" aria-label="Explore result filters">
         {[

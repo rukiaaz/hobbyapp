@@ -11,6 +11,7 @@ import PostGrid from './components/posts/PostGrid.jsx';
 import ProfileHeader from './components/profile/ProfileHeader.jsx';
 import SuggestedCreators from './components/sidebar/SuggestedCreators.jsx';
 import { auth, isFirebaseConfigured } from './services/firebase.js';
+import { listenToUserChats } from './services/chats.js';
 import { listenToBlockedUsers, createReport, toggleBlockUser } from './services/moderation.js';
 import {
   createPost,
@@ -35,10 +36,22 @@ const ChatPanel = lazy(() => import('./components/chat/ChatPanel.jsx'));
 const CreatePostView = lazy(() => import('./components/posts/CreatePostView.jsx'));
 const ExploreView = lazy(() => import('./components/explore/ExploreView.jsx'));
 const HobbyDetailView = lazy(() => import('./components/explore/HobbyDetailView.jsx'));
+const NotificationsView = lazy(() => import('./components/notifications/NotificationsView.jsx'));
 const ProfileView = lazy(() => import('./components/profile/ProfileView.jsx'));
 const PublicProfileView = lazy(() => import('./components/profile/PublicProfileView.jsx'));
+const SettingsView = lazy(() => import('./components/settings/SettingsView.jsx'));
 
-const signedInViews = new Set(['home', 'explore', 'create', 'messages', 'profile', 'public-profile', 'hobby']);
+const signedInViews = new Set([
+  'home',
+  'explore',
+  'create',
+  'messages',
+  'notifications',
+  'profile',
+  'public-profile',
+  'hobby',
+  'settings',
+]);
 
 function getHashSegments() {
   if (typeof window === 'undefined') {
@@ -89,6 +102,58 @@ function clearRouteHash() {
   }
 }
 
+
+const defaultNotificationPreferences = {
+  comments: true,
+  likes: true,
+  messages: true,
+};
+
+function getStorageKey(userId, key) {
+  return userId ? `hobby-app:${userId}:${key}` : '';
+}
+
+function readStoredValue(userId, key, fallback) {
+  const storageKey = getStorageKey(userId, key);
+
+  if (!storageKey || typeof window === 'undefined') {
+    return fallback;
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(storageKey);
+    return storedValue ? JSON.parse(storedValue) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStoredValue(userId, key, value) {
+  const storageKey = getStorageKey(userId, key);
+
+  if (storageKey && typeof window !== 'undefined') {
+    window.localStorage.setItem(storageKey, JSON.stringify(value));
+  }
+}
+
+function getProfileHistoryId(profile) {
+  return profile?.uid || profile?.handle || profile?.username || profile?.displayName || profile?.name || '';
+}
+
+function toProfileHistoryItem(profile) {
+  const id = getProfileHistoryId(profile);
+
+  return {
+    id,
+    avatar: profile?.avatar || profile?.displayName?.slice(0, 1) || profile?.name?.slice(0, 1) || '?',
+    bio: profile?.bio || '',
+    displayName: profile?.displayName || profile?.name || 'Creator',
+    handle: profile?.handle || profile?.username || '',
+    mainHobby: profile?.mainHobby || profile?.hobby || '',
+    uid: profile?.uid || '',
+  };
+}
+
 function needsEmailVerification(user) {
   return user?.providerData.some((provider) => provider.providerId === 'password') && !user.emailVerified;
 }
@@ -103,19 +168,23 @@ export default function App() {
       : 'Firebase is not configured. Create .env.local in the project root with your Firebase web app keys, then restart npm run dev.',
   );
   const [activeHobbyId, setActiveHobbyId] = useState(() => getHashParam());
+  const [chatSummaries, setChatSummaries] = useState([]);
   const [blockedUserIds, setBlockedUserIds] = useState(new Set());
   const [followingIds, setFollowingIds] = useState(new Set());
   const [isCreatingPost, setIsCreatingPost] = useState(false);
   const [isPostsLoading, setIsPostsLoading] = useState(false);
   const [livePosts, setLivePosts] = useState([]);
+  const [notificationPreferences, setNotificationPreferences] = useState(defaultNotificationPreferences);
   const [postError, setPostError] = useState('');
   const [profileError, setProfileError] = useState('');
   const [reportNotice, setReportNotice] = useState('');
   const [savedPostIds, setSavedPostIds] = useState(new Set());
+  const [searchHistory, setSearchHistory] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPublicProfile, setSelectedPublicProfile] = useState(null);
   const [signedInView, setSignedInView] = useState(getInitialSignedInView);
   const [userProfiles, setUserProfiles] = useState([]);
+  const [viewedProfiles, setViewedProfiles] = useState([]);
   const [vibelyProfile, setVibelyProfile] = useState(null);
 
   const isSignedIn = Boolean(currentUser);
@@ -135,6 +204,64 @@ export default function App() {
 
     return allPostsForDiscovery.filter((post) => post.handle === selectedPublicProfile.handle);
   }, [allPostsForDiscovery, livePosts, selectedPublicProfile]);
+  const blockedProfiles = useMemo(
+    () => userProfiles.filter((profile) => blockedUserIds.has(profile.uid)),
+    [blockedUserIds, userProfiles],
+  );
+  const notifications = useMemo(() => {
+    const ownPostNotifications = livePosts
+      .filter((post) => post.authorId === currentUser?.uid)
+      .flatMap((post) => {
+        const items = [];
+
+        if (notificationPreferences.likes && post.likesCount > 0) {
+          items.push({
+            id: `likes-${post.id}`,
+            body: `${post.likesCount} ${post.likesCount === 1 ? 'person likes' : 'people like'} this hobby update.`,
+            icon: '♥',
+            meta: post.title,
+            title: 'New likes on your post',
+            view: 'profile',
+          });
+        }
+
+        if (notificationPreferences.comments && post.commentsCount > 0) {
+          items.push({
+            id: `comments-${post.id}`,
+            body: `${post.commentsCount} ${post.commentsCount === 1 ? 'comment' : 'comments'} on your post.`,
+            icon: '💬',
+            meta: post.title,
+            title: 'New comments',
+            view: 'profile',
+          });
+        }
+
+        return items;
+      });
+
+    const messageNotifications = notificationPreferences.messages
+      ? chatSummaries
+          .filter((chat) => chat.isUnread)
+          .map((chat) => {
+            const partnerId = chat.participants.find((participantId) => participantId !== currentUser?.uid);
+            const partner = userProfiles.find((profile) => profile.uid === partnerId);
+
+            return {
+              id: `message-${chat.id}`,
+              body: chat.lastMessage || 'Sent you a message.',
+              icon: '✉',
+              isUnread: true,
+              meta: chat.lastMessageTimeAgo || 'Unread',
+              profile: partner,
+              title: partner ? `Message from ${partner.displayName}` : 'Unread message',
+              view: 'messages',
+            };
+          })
+      : [];
+
+    return [...messageNotifications, ...ownPostNotifications];
+  }, [chatSummaries, currentUser?.uid, livePosts, notificationPreferences, userProfiles]);
+  const notificationCount = notifications.length;
 
   useEffect(() => {
     function syncRouteFromHash() {
@@ -284,13 +411,39 @@ export default function App() {
     );
   }, [currentUser?.uid, needsVibelyProfile]);
 
+  useEffect(() => {
+    if (!currentUser?.uid || needsVibelyProfile) {
+      setChatSummaries([]);
+      return undefined;
+    }
+
+    return listenToUserChats(
+      currentUser.uid,
+      setChatSummaries,
+      (error) => setProfileError(`Could not load notification messages. (${error.code ?? 'unknown-error'})`),
+    );
+  }, [currentUser?.uid, needsVibelyProfile]);
+
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      setNotificationPreferences(defaultNotificationPreferences);
+      setSearchHistory([]);
+      setViewedProfiles([]);
+      return;
+    }
+
+    setNotificationPreferences(readStoredValue(currentUser.uid, 'notificationPreferences', defaultNotificationPreferences));
+    setSearchHistory(readStoredValue(currentUser.uid, 'searchHistory', []));
+    setViewedProfiles(readStoredValue(currentUser.uid, 'viewedProfiles', []));
+  }, [currentUser?.uid]);
+
   function navigateSignedInView(view, options) {
     const nextView = signedInViews.has(view) ? view : 'home';
     setSignedInView(nextView);
     writeSignedInViewToHash(nextView, options);
   }
 
-  function handleNavigate(view) {
+  function handleNavigate(view, options = {}) {
     if (!isSignedIn) {
       setAuthMode(view === 'signup' ? 'signup' : 'login');
       return;
@@ -300,6 +453,11 @@ export default function App() {
       return;
     }
 
+    if (options.search) {
+      setSearchQuery(options.search);
+      handleSearchCommit(options.search);
+    }
+
     navigateSignedInView(view || 'home');
   }
 
@@ -307,6 +465,58 @@ export default function App() {
     if (isSignedIn && !needsVibelyProfile) {
       navigateSignedInView('explore');
     }
+  }
+
+  function handleSearchChange(value) {
+    setSearchQuery(value);
+  }
+
+  function handleSearchCommit(value = searchQuery) {
+    const trimmedValue = value.trim();
+
+    if (trimmedValue.length < 2 || !currentUser?.uid) {
+      return;
+    }
+
+    setSearchHistory((currentHistory) => {
+      const nextHistory = [trimmedValue, ...currentHistory.filter((entry) => entry !== trimmedValue)].slice(0, 10);
+      writeStoredValue(currentUser.uid, 'searchHistory', nextHistory);
+      return nextHistory;
+    });
+  }
+
+  function handleRemoveSearchHistory(value) {
+    setSearchHistory((currentHistory) => {
+      const nextHistory = currentHistory.filter((entry) => entry !== value);
+      writeStoredValue(currentUser?.uid, 'searchHistory', nextHistory);
+      return nextHistory;
+    });
+  }
+
+  function handleClearSearchHistory() {
+    setSearchHistory([]);
+    writeStoredValue(currentUser?.uid, 'searchHistory', []);
+  }
+
+  function handleRemoveViewedProfile(profileId) {
+    setViewedProfiles((currentProfiles) => {
+      const nextProfiles = currentProfiles.filter((profileItem) => profileItem.id !== profileId);
+      writeStoredValue(currentUser?.uid, 'viewedProfiles', nextProfiles);
+      return nextProfiles;
+    });
+  }
+
+  function handleClearViewedProfiles() {
+    setViewedProfiles([]);
+    writeStoredValue(currentUser?.uid, 'viewedProfiles', []);
+  }
+
+  function handleUpdateNotificationPreference(name, value) {
+    setNotificationPreferences((currentPreferences) => {
+      const nextPreferences = { ...currentPreferences, [name]: value };
+      writeStoredValue(currentUser?.uid, 'notificationPreferences', nextPreferences);
+      return nextPreferences;
+    });
   }
 
   async function handleAuthComplete(user) {
@@ -501,6 +711,17 @@ export default function App() {
       : profileToView;
 
     setSelectedPublicProfile(resolvedProfile);
+
+    const historyItem = toProfileHistoryItem(resolvedProfile);
+
+    if (historyItem.id && currentUser?.uid && historyItem.uid !== currentUser.uid) {
+      setViewedProfiles((currentProfiles) => {
+        const nextProfiles = [historyItem, ...currentProfiles.filter((profileItem) => profileItem.id !== historyItem.id)].slice(0, 12);
+        writeStoredValue(currentUser.uid, 'viewedProfiles', nextProfiles);
+        return nextProfiles;
+      });
+    }
+
     navigateSignedInView('public-profile', { replace: false });
   }
 
@@ -535,14 +756,18 @@ export default function App() {
     }
     setAuthMode('login');
     setBlockedUserIds(new Set());
+    setChatSummaries([]);
     setFollowingIds(new Set());
     setLivePosts([]);
+    setNotificationPreferences(defaultNotificationPreferences);
     setPostError('');
     setReportNotice('');
     setSavedPostIds(new Set());
+    setSearchHistory([]);
     setSelectedPublicProfile(null);
     setSignedInView('home');
     setUserProfiles([]);
+    setViewedProfiles([]);
     setSearchQuery('');
     clearRouteHash();
   }
@@ -570,8 +795,10 @@ export default function App() {
         activeView={activeView}
         currentUser={currentUser}
         isAuthenticated={isSignedIn}
+        notificationCount={notificationCount}
         onNavigate={handleNavigate}
-        onSearchChange={setSearchQuery}
+        onSearchChange={handleSearchChange}
+        onSearchCommit={handleSearchCommit}
         onSearchFocus={handleSearchFocus}
         onSignOut={handleSignOut}
         searchQuery={searchQuery}
@@ -632,9 +859,12 @@ export default function App() {
                   isLoading={isPostsLoading}
                   livePosts={livePosts}
                   onOpenHobby={handleOpenHobby}
-                  onSearchChange={setSearchQuery}
+                  onRemoveSearchHistory={handleRemoveSearchHistory}
+                  onSearchChange={handleSearchChange}
+                  onSearchCommit={handleSearchCommit}
                   onViewProfile={handleViewProfile}
                   posts={posts}
+                  searchHistory={searchHistory}
                   searchQuery={searchQuery}
                   userProfiles={userProfiles}
                 />
@@ -644,7 +874,7 @@ export default function App() {
                 <HobbyDetailView
                   category={activeHobby}
                   onBack={() => handleNavigate('explore')}
-                  onSearchChange={setSearchQuery}
+                  onSearchChange={handleSearchChange}
                   posts={allPostsForDiscovery}
                   searchQuery={searchQuery}
                 />
@@ -670,6 +900,33 @@ export default function App() {
                   onReport={handleReport}
                   onViewProfile={handleViewProfile}
                   profile={vibelyProfile}
+                />
+              )}
+
+              {activeView === 'notifications' && (
+                <NotificationsView
+                  notifications={notifications}
+                  onNavigate={handleNavigate}
+                  onViewProfile={handleViewProfile}
+                />
+              )}
+
+              {activeView === 'settings' && (
+                <SettingsView
+                  blockedProfiles={blockedProfiles}
+                  currentUser={currentUser}
+                  notificationPreferences={notificationPreferences}
+                  onClearSearchHistory={handleClearSearchHistory}
+                  onClearViewedProfiles={handleClearViewedProfiles}
+                  onNavigate={handleNavigate}
+                  onRemoveSearchHistory={handleRemoveSearchHistory}
+                  onRemoveViewedProfile={handleRemoveViewedProfile}
+                  onToggleBlock={handleToggleBlock}
+                  onUpdateNotificationPreference={handleUpdateNotificationPreference}
+                  onViewProfile={handleViewProfile}
+                  profile={vibelyProfile}
+                  searchHistory={searchHistory}
+                  viewedProfiles={viewedProfiles}
                 />
               )}
 

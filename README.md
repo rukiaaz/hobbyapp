@@ -34,6 +34,9 @@ src/
 - Searchable Explore view with hobby trends and live + mock posts
 - Hash-routed Home, Explore, Create, Messages, and Profile navigation
 - User-to-user Firestore chat messages with image attachments, unread badges, profile peek, search, lightbox, and local-only nicknames
+- Notifications inbox for unread messages plus like/comment activity on your own posts
+- Local search history with removable chips and clean settings controls
+- Stalked/recently viewed account history with an × remove button
 - Saved posts, persisted follow/following state, public profile viewing, own-post edit/delete, and comment deletion
 - Loading skeletons, safer media validation, report/block placeholder data model, and hobby detail routes
 - Responsive Instagram-inspired feed UI
@@ -231,7 +234,9 @@ Signed-in navigation uses hash routes so links survive refreshes and can be shar
 /#/hobby/crafts
 /#/create
 /#/messages
+/#/notifications
 /#/profile
+/#/settings
 /#/public-profile
 ```
 
@@ -255,6 +260,7 @@ users/{userId}/blockedUsers: createdAt DESC
 - Engagement: like, save/unsave, comment, delete own comment, share.
 - Social: follow/unfollow a real Vibely user, verify follower/following counts change.
 - Messages: search conversations, open a thread, send text/image, check unread badge, open image lightbox, use back arrow.
+- Notifications/settings: toggle notification preferences, remove search history, remove stalked accounts with ×, unblock users.
 - Safety: report a post/user and block/unblock a user placeholder flow.
 - Discovery: Explore post/people/hobby filters and hobby detail route.
 - Responsive: verify mobile (~375px), tablet (~768px), and desktop (~1200px).

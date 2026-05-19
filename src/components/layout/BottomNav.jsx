@@ -3,7 +3,9 @@ const items = [
   { label: 'Explore', icon: '⌕', view: 'explore' },
   { label: 'Create', icon: '+', view: 'create' },
   { label: 'Messages', icon: '✉', view: 'messages' },
+  { label: 'Alerts', icon: '!', view: 'notifications' },
   { label: 'Profile', icon: '◉', view: 'profile' },
+  { label: 'Settings', icon: '⚙', view: 'settings' },
 ];
 
 export default function BottomNav({ activeView = 'home', onNavigate }) {

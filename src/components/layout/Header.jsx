@@ -14,8 +14,10 @@ export default function Header({
   activeView = 'home',
   currentUser,
   isAuthenticated = false,
+  notificationCount = 0,
   onNavigate,
   onSearchChange,
+  onSearchCommit,
   onSearchFocus,
   onSignOut,
   searchQuery = '',
@@ -46,6 +48,11 @@ export default function Header({
             disabled={activeView === 'onboarding'}
             onChange={(event) => onSearchChange?.(event.target.value)}
             onFocus={onSearchFocus}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                onSearchCommit?.(event.currentTarget.value);
+              }
+            }}
             placeholder="Search hobbies, makers, posts"
             type="search"
             value={searchQuery}
@@ -91,12 +98,29 @@ export default function Header({
               Messages
             </button>
             <button
+              className={`desktop-nav-button ${activeView === 'notifications' ? 'active' : ''}`}
+              disabled={activeView === 'onboarding'}
+              onClick={() => navigateTo('notifications')}
+              type="button"
+            >
+              <span>Notifications</span>
+              {notificationCount > 0 && <span className="notification-badge">{notificationCount}</span>}
+            </button>
+            <button
               className={`desktop-nav-button ${activeView === 'profile' ? 'active' : ''}`}
               disabled={activeView === 'onboarding'}
               onClick={() => navigateTo('profile')}
               type="button"
             >
               Profile
+            </button>
+            <button
+              className={`desktop-nav-button ${activeView === 'settings' ? 'active' : ''}`}
+              disabled={activeView === 'onboarding'}
+              onClick={() => navigateTo('settings')}
+              type="button"
+            >
+              Settings
             </button>
             <span className="user-chip" title={userLabel}>
               {activeView === 'onboarding' ? 'Create Vibely profile' : userLabel}
