@@ -290,6 +290,15 @@ h3 {
   margin: 1.25rem auto 4rem;
 }
 
+.layout.focus-layout {
+  grid-template-columns: minmax(0, 920px);
+  width: min(980px, calc(100% - 1.5rem));
+}
+
+.layout.focus-layout .main-column {
+  width: 100%;
+}
+
 .main-column,
 .side-column,
 .home-feed,

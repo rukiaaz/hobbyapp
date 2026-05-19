@@ -190,6 +190,7 @@ export default function App() {
   const isSignedIn = Boolean(currentUser);
   const needsVibelyProfile = isSignedIn && !vibelyProfile;
   const activeView = isSignedIn ? (needsVibelyProfile ? 'onboarding' : signedInView) : authMode;
+  const showCommunitySidebar = activeView === 'home';
   const profilePreview = toAppProfile(vibelyProfile, userProfile);
   const allPostsForDiscovery = useMemo(() => [...livePosts, ...posts], [livePosts]);
   const activeHobby = hobbyCategories.find((category) => category.id === activeHobbyId) ?? hobbyCategories[0];
@@ -813,7 +814,7 @@ export default function App() {
           user={currentUser}
         />
       ) : isSignedIn ? (
-        <main className="layout">
+        <main className={`layout ${showCommunitySidebar ? '' : 'focus-layout'}`}>
           <section className="main-column" aria-label={`${activeView} screen`}>
             {reportNotice && <p className="success-message">{reportNotice}</p>}
 
@@ -957,9 +958,9 @@ export default function App() {
             </Suspense>
           </section>
 
-          <aside className="side-column" aria-label="Community sidebar">
-            <Suspense fallback={<LoadingSkeleton count={1} type="messages" />}>
-              {activeView !== 'messages' && (
+          {showCommunitySidebar && (
+            <aside className="side-column" aria-label="Community sidebar">
+              <Suspense fallback={<LoadingSkeleton count={1} type="messages" />}>
                 <ChatPanel
                   blockedUserIds={blockedUserIds}
                   currentUser={currentUser}
@@ -970,10 +971,10 @@ export default function App() {
                   onViewProfile={handleViewProfile}
                   profile={vibelyProfile}
                 />
-              )}
-            </Suspense>
-            <SuggestedCreators creators={suggestedCreators} onViewCreator={handleViewProfile} />
-          </aside>
+              </Suspense>
+              <SuggestedCreators creators={suggestedCreators} onViewCreator={handleViewProfile} />
+            </aside>
+          )}
         </main>
       ) : (
         <AuthPage
