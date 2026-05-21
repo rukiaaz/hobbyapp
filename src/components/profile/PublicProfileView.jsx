@@ -4,11 +4,11 @@ import ProfileHeader from './ProfileHeader.jsx';
 function toHeaderProfile(profile, fallbackPostsCount = 0) {
   return {
     avatar: profile?.avatar || profile?.displayName?.slice(0, 1) || '?',
-    bio: profile?.bio || 'Hobby App creator sharing progress and inspiration.',
-    featuredHobbies: [profile?.mainHobby || 'Hobbies'],
+    bio: profile?.bio || 'Vibely creator sharing progress and inspiration.',
+    featuredHobbies: profile?.interests?.length ? profile.interests : [profile?.mainHobby || 'Hobbies'],
     followers: profile?.followersCount ?? 0,
     following: profile?.followingCount ?? 0,
-    location: 'Hobby App',
+    location: 'Vibely',
     name: profile?.displayName || profile?.name || 'Creator',
     posts: profile?.postsCount ?? fallbackPostsCount,
     username: profile?.handle || profile?.username || '@creator',
@@ -29,6 +29,7 @@ export default function PublicProfileView({
   const isOwnProfile = profile?.uid && profile.uid === currentUser?.uid;
   const canFollow = profile?.uid && !isOwnProfile;
   const isFollowing = profile?.uid && followingIds.has(profile.uid);
+  const isPrivate = profile?.privacy?.profileVisibility === 'private' && !isOwnProfile && !isFollowing;
 
   return (
     <section className="profile-view public-profile-view" aria-labelledby="public-profile-title">
@@ -62,6 +63,11 @@ export default function PublicProfileView({
         <div className="empty-state">
           <strong>User blocked</strong>
           <p>You can unblock them from this profile if you want to see their content again.</p>
+        </div>
+      ) : isPrivate ? (
+        <div className="empty-state">
+          <strong>Private profile</strong>
+          <p>Follow this creator to request a closer look at their hobby posts.</p>
         </div>
       ) : (
         <section className="profile-preview" aria-labelledby="public-profile-posts-title">

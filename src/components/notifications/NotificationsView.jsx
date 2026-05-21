@@ -1,3 +1,15 @@
+import AppIcon from '../common/AppIcon.jsx';
+
+const knownIcons = new Set(['comment', 'heart', 'messages']);
+
+function NotificationGlyph({ icon }) {
+  if (knownIcons.has(icon)) {
+    return <AppIcon name={icon} size={18} />;
+  }
+
+  return <span>{icon || '!'}</span>;
+}
+
 export default function NotificationsView({ notifications = [], onNavigate, onViewProfile }) {
   return (
     <section className="notifications-view" aria-labelledby="notifications-title">
@@ -15,7 +27,9 @@ export default function NotificationsView({ notifications = [], onNavigate, onVi
         <div className="notification-list">
           {notifications.map((notification) => (
             <article className={`notification-card ${notification.isUnread ? 'unread' : ''}`} key={notification.id}>
-              <span className="notification-icon" aria-hidden="true">{notification.icon}</span>
+              <span className="notification-icon" aria-hidden="true">
+                <NotificationGlyph icon={notification.icon} />
+              </span>
               <div>
                 <strong>{notification.title}</strong>
                 <p>{notification.body}</p>

@@ -2,6 +2,7 @@ import {
   addDoc,
   collection,
   doc,
+  limit as queryLimit,
   onSnapshot,
   orderBy,
   query,
@@ -9,7 +10,9 @@ import {
   setDoc,
   where,
 } from 'firebase/firestore';
+import { callAppFunction, shouldUseDirectFirestoreFallback } from './api.js';
 import { db } from './firebase.js';
+import { enforceClientCooldown } from '../utils/actionGuards.js';
 import { validateChatImageFile } from '../utils/mediaValidation.js';
 
 const cloudinaryConfig = {
@@ -68,21 +71,11 @@ function getParticipantSummary(profile) {
   };
 }
 
-async function uploadChatImage(imageFile) {
-  if (!imageFile) {
-    return { imagePublicId: '', imageUrl: '' };
-  }
-
-  const validation = validateChatImageFile(imageFile);
-
-  if (!validation.isValid) {
-    throw createServiceError('media/invalid-file', validation.message);
-  }
-
+async function uploadChatImageWithUnsignedPreset(imageFile) {
   if (!cloudinaryConfig.cloudName || !cloudinaryConfig.uploadPreset) {
     throw createServiceError(
       'cloudinary/not-configured',
-      'Cloudinary cloud name and unsigned upload preset are required for chat photos.',
+      'Cloudinary cloud name and unsigned upload preset are required for local direct uploads.',
     );
   }
 
@@ -97,7 +90,6 @@ async function uploadChatImage(imageFile) {
       body: formData,
     },
   );
-
   const result = await response.json();
 
   if (!response.ok) {
@@ -107,9 +99,62 @@ async function uploadChatImage(imageFile) {
     );
   }
 
+  return result;
+}
+
+async function uploadChatImageWithSignature(imageFile) {
+  enforceClientCooldown('uploadSignature');
+
+  const signature = await callAppFunction('createCloudinaryUploadSignature', {
+    kind: 'chat',
+    resourceType: 'image',
+  });
+  const formData = new FormData();
+  formData.append('file', imageFile);
+  formData.append('api_key', signature.apiKey);
+  formData.append('timestamp', signature.timestamp);
+  formData.append('signature', signature.signature);
+  formData.append('folder', signature.folder);
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${signature.cloudName}/image/upload`,
+    {
+      method: 'POST',
+      body: formData,
+    },
+  );
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw createServiceError(
+      'cloudinary/upload-failed',
+      result?.error?.message || 'Cloudinary chat image upload failed.',
+    );
+  }
+
+  return result;
+}
+
+async function uploadChatImage(imageFile) {
+  if (!imageFile) {
+    return { imagePublicId: '', imageUrl: '', mediaPublicId: '', mediaUrl: '' };
+  }
+
+  const validation = validateChatImageFile(imageFile);
+
+  if (!validation.isValid) {
+    throw createServiceError('media/invalid-file', validation.message);
+  }
+
+  const result = shouldUseDirectFirestoreFallback()
+    ? await uploadChatImageWithUnsignedPreset(imageFile)
+    : await uploadChatImageWithSignature(imageFile);
+
   return {
     imagePublicId: result.public_id,
     imageUrl: result.secure_url,
+    mediaPublicId: result.public_id,
+    mediaUrl: result.secure_url,
   };
 }
 
@@ -125,6 +170,10 @@ function normalizeMessageInput(messageInput) {
 }
 
 export async function ensureChat(currentUser, currentProfile, recipientProfile) {
+  if (!shouldUseDirectFirestoreFallback()) {
+    return callAppFunction('ensureChat', { recipientId: recipientProfile.uid });
+  }
+
   const chatId = getChatId(currentUser.uid, recipientProfile.uid);
   const participantProfiles = {
     [currentUser.uid]: getParticipantSummary(currentProfile),
@@ -147,7 +196,11 @@ export function listenToUserChats(currentUserId, onChange, onError) {
     return () => {};
   }
 
-  const chatsQuery = query(collection(db, 'chats'), where('participants', 'array-contains', currentUserId));
+  const chatsQuery = query(
+    collection(db, 'chats'),
+    where('participants', 'array-contains', currentUserId),
+    queryLimit(60),
+  );
 
   return onSnapshot(
     chatsQuery,
@@ -193,13 +246,14 @@ export function listenToMessages(currentUserId, otherUserId, onChange, onError) 
   }
 
   const chatId = getChatId(currentUserId, otherUserId);
-  const messagesQuery = query(collection(db, 'chats', chatId, 'messages'), orderBy('createdAt', 'asc'));
+  const messagesQuery = query(collection(db, 'chats', chatId, 'messages'), orderBy('createdAt', 'asc'), queryLimit(200));
 
   return onSnapshot(
     messagesQuery,
     (snapshot) => {
       const messages = snapshot.docs.map((messageDocument) => {
         const data = messageDocument.data();
+        const createdAt = getDateFromTimestamp(data.createdAt);
         return {
           id: messageDocument.id,
           senderId: data.senderId,
@@ -211,11 +265,14 @@ export function listenToMessages(currentUserId, otherUserId, onChange, onError) 
           imagePublicId: data.imagePublicId || '',
           imageUrl: data.imageUrl || '',
           mediaType: data.mediaType || '',
-          createdAt: getDateFromTimestamp(data.createdAt),
-          createdAtLabel: getDateFromTimestamp(data.createdAt)
-            ? new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(getDateFromTimestamp(data.createdAt))
+          createdAt,
+          createdAtLabel: createdAt
+            ? new Intl.DateTimeFormat('en', { dateStyle: 'medium', timeStyle: 'short' }).format(createdAt)
             : 'just now',
-          timeAgo: getTimeAgo(getDateFromTimestamp(data.createdAt)),
+          dayLabel: createdAt
+            ? new Intl.DateTimeFormat('en', { dateStyle: 'medium' }).format(createdAt)
+            : 'Today',
+          timeAgo: getTimeAgo(createdAt),
         };
       });
 
@@ -228,6 +285,10 @@ export function listenToMessages(currentUserId, otherUserId, onChange, onError) 
 export async function markChatRead(currentUserId, otherUserId) {
   if (!currentUserId || !otherUserId) {
     return;
+  }
+
+  if (!shouldUseDirectFirestoreFallback()) {
+    return callAppFunction('markChatRead', { otherUserId });
   }
 
   const chatId = getChatId(currentUserId, otherUserId);
@@ -251,34 +312,45 @@ export async function sendMessage(currentUser, currentProfile, recipientProfile,
     return;
   }
 
-  const { imagePublicId, imageUrl } = await uploadChatImage(imageFile);
+  enforceClientCooldown('message');
+
+  const media = await uploadChatImage(imageFile);
+
+  if (!shouldUseDirectFirestoreFallback()) {
+    return callAppFunction('sendMessage', {
+      media,
+      recipientId: recipientProfile.uid,
+      text: trimmedText,
+    });
+  }
+
   const chatId = getChatId(currentUser.uid, recipientProfile.uid);
   const chatRef = doc(db, 'chats', chatId);
   const lastMessage = trimmedText || '📷 Photo';
 
   await ensureChat(currentUser, currentProfile, recipientProfile);
 
+  await addDoc(collection(db, 'chats', chatId, 'messages'), {
+    senderId: currentUser.uid,
+    recipientId: recipientProfile.uid,
+    text: trimmedText,
+    creator: currentProfile.displayName,
+    handle: currentProfile.handle,
+    avatar: currentProfile.avatar,
+    imagePublicId: media.imagePublicId,
+    imageUrl: media.imageUrl,
+    mediaType: media.imageUrl ? 'image' : '',
+    createdAt: serverTimestamp(),
+  });
+
   await setDoc(
     chatRef,
     {
       lastMessage,
-      lastMessageSenderId: currentUser.uid,
       lastMessageAt: serverTimestamp(),
+      lastMessageSenderId: currentUser.uid,
       updatedAt: serverTimestamp(),
     },
     { merge: true },
   );
-
-  await addDoc(collection(db, 'chats', chatId, 'messages'), {
-    senderId: currentUser.uid,
-    recipientId: recipientProfile.uid,
-    creator: currentProfile.displayName,
-    handle: currentProfile.handle,
-    avatar: currentProfile.avatar,
-    text: trimmedText,
-    imagePublicId,
-    imageUrl,
-    mediaType: imageUrl ? 'image' : '',
-    createdAt: serverTimestamp(),
-  });
 }

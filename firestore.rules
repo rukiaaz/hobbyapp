@@ -1,0 +1,192 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isUser(userId) {
+      return signedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    function hasOnlyAllowedProfileKeys() {
+      return request.resource.data.keys().hasOnly([
+        'uid',
+        'displayName',
+        'username',
+        'handle',
+        'avatar',
+        'mainHobby',
+        'interests',
+        'bio',
+        'privacy',
+        'followersCount',
+        'followingCount',
+        'postsCount',
+        'createdAt',
+        'updatedAt'
+      ]);
+    }
+
+    function hasReservedUsername(userId) {
+      return existsAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username))
+        && getAfter(/databases/$(database)/documents/usernames/$(request.resource.data.username)).data.uid == userId;
+    }
+
+    function validPublicProfile(userId) {
+      return hasOnlyAllowedProfileKeys()
+        && request.resource.data.uid == userId
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() >= 1
+        && request.resource.data.displayName.size() <= 50
+        && request.resource.data.username is string
+        && request.resource.data.username.matches('^[a-z0-9_]{3,20}$')
+        && request.resource.data.handle == ('@' + request.resource.data.username)
+        && request.resource.data.avatar is string
+        && request.resource.data.avatar.size() <= 4
+        && request.resource.data.mainHobby is string
+        && request.resource.data.mainHobby.size() >= 1
+        && request.resource.data.mainHobby.size() <= 40
+        && request.resource.data.bio is string
+        && request.resource.data.bio.size() >= 1
+        && request.resource.data.bio.size() <= 160
+        && (!('interests' in request.resource.data)
+          || (request.resource.data.interests is list && request.resource.data.interests.size() <= 8))
+        && (!('privacy' in request.resource.data) || request.resource.data.privacy is map)
+        && request.resource.data.followersCount is int
+        && request.resource.data.followingCount is int
+        && request.resource.data.postsCount is int
+        && request.resource.data.followersCount >= 0
+        && request.resource.data.followingCount >= 0
+        && request.resource.data.postsCount >= 0
+        && hasReservedUsername(userId);
+    }
+
+    function ownerProfileFieldsOnly() {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+        'displayName',
+        'username',
+        'handle',
+        'avatar',
+        'mainHobby',
+        'interests',
+        'bio',
+        'privacy',
+        'updatedAt',
+        'email',
+        'authProviders'
+      ]);
+    }
+
+    function validSavedPost() {
+      return request.resource.data.keys().hasOnly([
+        'postId',
+        'postAuthorId',
+        'title',
+        'creator',
+        'handle',
+        'hobby',
+        'categoryId',
+        'mediaUrl',
+        'mediaType',
+        'isLive',
+        'savedAt'
+      ])
+      && request.resource.data.postId is string
+      && request.resource.data.title is string
+      && request.resource.data.title.size() <= 100;
+    }
+
+    function isChatParticipant(chatId) {
+      return signedIn()
+        && request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.participants;
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn();
+      allow create: if isUser(userId)
+        && validPublicProfile(userId)
+        && request.resource.data.followersCount == 0
+        && request.resource.data.followingCount == 0
+        && request.resource.data.postsCount == 0;
+      allow update: if isUser(userId)
+        && validPublicProfile(userId)
+        && ownerProfileFieldsOnly();
+      allow delete: if false;
+
+      match /privateSettings/{settingId} {
+        allow read, create, update, delete: if isUser(userId);
+      }
+
+      match /savedPosts/{postId} {
+        allow read: if isUser(userId);
+        allow create, update: if isUser(userId) && validSavedPost();
+        allow delete: if isUser(userId);
+      }
+
+      match /following/{targetId} {
+        allow read: if signedIn();
+        allow create, update, delete: if false;
+      }
+
+      match /followers/{followerId} {
+        allow read: if signedIn();
+        allow create, update, delete: if false;
+      }
+
+      match /blockedUsers/{targetId} {
+        allow read: if isUser(userId);
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /usernames/{username} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+    }
+
+    match /posts/{postId} {
+      allow read: if signedIn();
+      allow create, update, delete: if false;
+
+      match /likes/{userId} {
+        allow read: if signedIn();
+        allow create, update, delete: if false;
+      }
+
+      match /comments/{commentId} {
+        allow read: if signedIn();
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /chats/{chatId} {
+      allow read: if signedIn() && request.auth.uid in resource.data.participants;
+      allow create, update, delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if isChatParticipant(chatId);
+        allow create, update, delete: if false;
+      }
+    }
+
+    match /reports/{reportId} {
+      allow read, update: if isAdmin();
+      allow create, delete: if false;
+    }
+
+    match /notifications/{notificationId} {
+      allow read: if signedIn() && resource.data.recipientId == request.auth.uid;
+      allow create, update, delete: if false;
+    }
+
+    match /rateLimits/{rateLimitId} {
+      allow read, write: if false;
+    }
+  }
+}

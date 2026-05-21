@@ -2,7 +2,12 @@ export const MEDIA_LIMITS = {
   chatImageBytes: 8 * 1024 * 1024,
   postImageBytes: 25 * 1024 * 1024,
   postVideoBytes: 80 * 1024 * 1024,
+  postVideoSeconds: 90,
 };
+
+const POST_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
+const POST_VIDEO_TYPES = new Set(['video/mp4', 'video/quicktime', 'video/webm']);
+const CHAT_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif']);
 
 export function formatBytes(bytes) {
   if (!Number.isFinite(bytes) || bytes <= 0) {
@@ -17,16 +22,21 @@ function createValidationResult(isValid, message = '') {
   return { isValid, message };
 }
 
+function getFileType(file) {
+  return (file?.type || '').toLowerCase();
+}
+
 export function validatePostMediaFile(file) {
   if (!file) {
     return createValidationResult(true);
   }
 
-  const isImage = file.type.startsWith('image/');
-  const isVideo = file.type.startsWith('video/');
+  const fileType = getFileType(file);
+  const isImage = POST_IMAGE_TYPES.has(fileType);
+  const isVideo = POST_VIDEO_TYPES.has(fileType);
 
   if (!isImage && !isVideo) {
-    return createValidationResult(false, 'Choose an image or video file for posts.');
+    return createValidationResult(false, 'Choose a JPG, PNG, WebP, GIF, MP4, MOV, or WebM file for posts.');
   }
 
   const maxBytes = isVideo ? MEDIA_LIMITS.postVideoBytes : MEDIA_LIMITS.postImageBytes;
@@ -46,8 +56,10 @@ export function validateChatImageFile(file) {
     return createValidationResult(true);
   }
 
-  if (!file.type.startsWith('image/')) {
-    return createValidationResult(false, 'Chat attachments must be image files.');
+  const fileType = getFileType(file);
+
+  if (!CHAT_IMAGE_TYPES.has(fileType)) {
+    return createValidationResult(false, 'Chat attachments must be JPG, PNG, WebP, or GIF images.');
   }
 
   if (file.size > MEDIA_LIMITS.chatImageBytes) {

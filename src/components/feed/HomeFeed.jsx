@@ -24,11 +24,15 @@ function toMockFeedPost(post, interaction) {
   };
 }
 
+function getStoryMedia(post) {
+  return post.mediaUrl || post.imageUrl || '';
+}
+
 async function sharePost(post) {
   const shareUrl = `${window.location.origin}/#post-${post.id}`;
   const shareData = {
     title: post.title,
-    text: `${post.title} by ${post.creator} on Hobby App`,
+    text: `${post.title} by ${post.creator} on Vibely`,
     url: shareUrl,
   };
 
@@ -63,7 +67,7 @@ export default function HomeFeed({
   const [localInteractions, setLocalInteractions] = useState({});
 
   const feedCategories = useMemo(
-    () => [categories[0], { id: 'following', label: 'Following', icon: '👥' }, ...categories.slice(1)],
+    () => [{ id: 'all', label: 'For you' }, { id: 'following', label: 'Following' }, ...categories.slice(1)],
     [categories],
   );
 
@@ -76,14 +80,50 @@ export default function HomeFeed({
     () => [...livePosts.map((post) => ({ ...post, viewerHasSaved: savedPostIds.has(post.id) })), ...mockPosts],
     [livePosts, mockPosts, savedPostIds],
   );
-  const heroPosts = useMemo(
-    () => allPosts.filter((post) => (post.mediaUrl || post.imageUrl) && post.mediaType !== 'video').slice(0, 3),
-    [allPosts],
-  );
-  const totalEngagement = useMemo(
-    () => allPosts.reduce((total, post) => total + (post.likesCount ?? 0) + (post.commentsCount ?? 0), 0),
-    [allPosts],
-  );
+
+  const storyProfiles = useMemo(() => {
+    const seen = new Set();
+    const stories = [];
+
+    if (profile) {
+      stories.push({
+        avatar: profile.avatar,
+        id: `self-${profile.uid || profile.handle || profile.displayName}`,
+        isSelf: true,
+        label: 'You',
+        name: profile.displayName,
+      });
+    }
+
+    allPosts.forEach((post) => {
+      const storyId = post.authorId || post.handle || post.creator;
+
+      if (!storyId || seen.has(storyId)) {
+        return;
+      }
+
+      seen.add(storyId);
+      stories.push({
+        avatar: post.avatar || post.creator.slice(0, 1),
+        handle: post.handle,
+        hobby: post.hobby,
+        id: storyId,
+        imageUrl: getStoryMedia(post),
+        label: (post.handle || post.creator).replace(/^@/, ''),
+        name: post.creator,
+        profile: {
+          avatar: post.avatar,
+          bio: post.caption,
+          displayName: post.creator,
+          handle: post.handle,
+          mainHobby: post.hobby,
+          uid: post.authorId,
+        },
+      });
+    });
+
+    return stories.slice(0, 8);
+  }, [allPosts, profile]);
 
   const activeCategory = feedCategories.find((category) => category.id === activeCategoryId) ?? feedCategories[0];
 
@@ -184,31 +224,41 @@ export default function HomeFeed({
   }
 
   return (
-    <section className="home-feed" aria-labelledby="home-feed-title">
-      <div className="feed-hero">
-        <div className="feed-hero-copy">
-          <p className="eyebrow">Home feed</p>
-          <h1 id="home-feed-title">Discover today&apos;s hobby progress</h1>
-          <p>
-            Follow makers, athletes, artists, cooks, and collectors as they share small wins,
-            experiments, and inspiration from their hobbies.
-          </p>
-          <div className="hero-metrics" aria-label="Feed activity summary">
-            <span><strong>{allPosts.length}</strong> fresh posts</span>
-            <span><strong>{totalEngagement}</strong> reactions</span>
-            <span><strong>{categories.length - 1}</strong> hobbies</span>
-          </div>
+    <section className="home-feed vibe-feed" aria-labelledby="home-feed-title">
+      <div className="feed-intro-card">
+        <div>
+          <p className="eyebrow">Vibely feed</p>
+          <h1 id="home-feed-title">Your circle is making things.</h1>
         </div>
-
-        <div className="hero-media-stack" aria-hidden="true">
-          {heroPosts.map((post, index) => (
-            <article className="hero-photo-card" key={post.id} style={{ '--card-index': index }}>
-              <img alt="" src={post.mediaUrl || post.imageUrl} />
-              <span>{post.hobby}</span>
-            </article>
-          ))}
-        </div>
+        <p>
+          Scroll hobby progress, save ideas, and drop quick encouragement while everything stays
+          light, visual, and easy to scan.
+        </p>
       </div>
+
+      <section className="story-strip" aria-label="Creator stories">
+        {storyProfiles.map((story) => (
+          <button
+            className={`story-pill ${story.isSelf ? 'is-self' : ''}`}
+            key={story.id}
+            onClick={() => {
+              if (story.isSelf) {
+                return;
+              }
+
+              onViewProfile?.(story.profile);
+            }}
+            type="button"
+          >
+            <span className="story-ring">
+              <span className="story-avatar" aria-hidden="true">
+                {story.imageUrl ? <img alt="" src={story.imageUrl} /> : story.avatar}
+              </span>
+            </span>
+            <span>{story.label}</span>
+          </button>
+        ))}
+      </section>
 
       <PostComposer
         categories={categories}
@@ -219,15 +269,16 @@ export default function HomeFeed({
 
       {feedError && <p className="auth-message">{feedError}</p>}
 
-      <HobbyTabs
-        activeCategoryId={activeCategoryId}
-        categories={feedCategories}
-        onCategoryChange={setActiveCategoryId}
-      />
-
-      <div className="section-heading feed-summary">
-        <p>{activeCategory.label} posts</p>
-        <span>{filteredPosts.length} post{filteredPosts.length === 1 ? '' : 's'} showing</span>
+      <div className="feed-filter-row">
+        <HobbyTabs
+          activeCategoryId={activeCategoryId}
+          categories={feedCategories}
+          onCategoryChange={setActiveCategoryId}
+        />
+        <div className="feed-summary">
+          <p>{activeCategory.label}</p>
+          <span>{filteredPosts.length} posts</span>
+        </div>
       </div>
 
       {isLoading ? (
@@ -256,7 +307,7 @@ export default function HomeFeed({
           ) : (
             <div className="empty-state">
               <strong>No posts yet</strong>
-              <p>Try another hobby category, follow creators, or create the first post for this hobby.</p>
+              <p>Try another category, follow more creators, or share the first update.</p>
             </div>
           )}
         </div>

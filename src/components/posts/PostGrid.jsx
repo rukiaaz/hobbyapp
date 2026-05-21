@@ -31,7 +31,7 @@ export default function PostGrid({ posts }) {
             )}
             <div className="grid-post-overlay">
               <strong>{post.hobby}</strong>
-              <span>♡ {likes} · 💬 {comments}</span>
+              <span>{likes} likes · {comments} comments</span>
             </div>
           </article>
         );

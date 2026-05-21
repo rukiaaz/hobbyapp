@@ -1,11 +1,11 @@
+import AppIcon from '../common/AppIcon.jsx';
+
 const items = [
-  { label: 'Home', icon: '⌂', view: 'home' },
-  { label: 'Explore', icon: '⌕', view: 'explore' },
-  { label: 'Create', icon: '+', view: 'create' },
-  { label: 'Messages', icon: '✉', view: 'messages' },
-  { label: 'Alerts', icon: '!', view: 'notifications' },
-  { label: 'Profile', icon: '◉', view: 'profile' },
-  { label: 'Settings', icon: '⚙', view: 'settings' },
+  { label: 'Home', icon: 'home', view: 'home' },
+  { label: 'Search', icon: 'search', view: 'search' },
+  { label: 'Create', icon: 'create', view: 'create' },
+  { label: 'Reels', icon: 'reels', view: 'reels' },
+  { label: 'Profile', icon: 'user', view: 'profile' },
 ];
 
 export default function BottomNav({ activeView = 'home', onNavigate }) {
@@ -22,7 +22,9 @@ export default function BottomNav({ activeView = 'home', onNavigate }) {
             type="button"
             aria-label={item.label}
           >
-            <span aria-hidden="true">{item.icon}</span>
+            <span className="bottom-nav-icon" aria-hidden="true">
+              <AppIcon name={item.icon} size={21} />
+            </span>
             <small>{item.label}</small>
           </button>
         );

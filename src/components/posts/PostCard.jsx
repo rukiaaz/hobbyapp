@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import AppIcon from '../common/AppIcon.jsx';
 import { listenToComments } from '../../services/posts.js';
 
 function getAvatarLabel(post) {
@@ -11,6 +12,14 @@ function getPostMediaUrl(post) {
 
 function isVideoPost(post) {
   return post.mediaType === 'video' || post.mediaResourceType === 'video';
+}
+
+function formatReactionLine(post) {
+  if ((post.likesCount ?? 0) <= 0) {
+    return 'Be the first to react';
+  }
+
+  return `${post.likesCount} likes`;
 }
 
 export default function PostCard({
@@ -160,28 +169,33 @@ export default function PostCard({
   }
 
   return (
-    <article className={`feed-card ${post.isLive ? 'is-live' : 'is-demo'}`} id={`post-${post.id}`}>
+    <article className={`feed-card vibe-post-card ${post.isLive ? 'is-live' : 'is-demo'}`} id={`post-${post.id}`}>
       <header className="feed-header">
-        <button className="mini-avatar avatar-button" onClick={handleViewAuthor} type="button" aria-label={`View ${post.creator} profile`}>
+        <button
+          aria-label={`View ${post.creator} profile`}
+          className="mini-avatar avatar-button"
+          onClick={handleViewAuthor}
+          type="button"
+        >
           {getAvatarLabel(post)}
         </button>
 
         <button className="feed-author author-button" onClick={handleViewAuthor} type="button">
           <strong>{post.creator}</strong>
           <p>
-            {post.handle} · {post.hobby} · {post.timeAgo}
+            {post.handle} · {post.hobby}
           </p>
         </button>
 
-        <span className="live-pill">{post.isLive ? 'Live' : 'Inspo'}</span>
+        <span className="post-time">{post.createdAtLabel || post.timeAgo}</span>
         <button
+          aria-expanded={isMenuOpen}
+          aria-label={`More options for ${post.title}`}
           className="more-button"
           onClick={() => setIsMenuOpen((open) => !open)}
           type="button"
-          aria-expanded={isMenuOpen}
-          aria-label={`More options for ${post.title}`}
         >
-          •••
+          <AppIcon name="menu" size={18} />
         </button>
       </header>
 
@@ -189,11 +203,17 @@ export default function PostCard({
         <div className="post-menu" role="menu">
           {isOwnPost && (
             <>
-              <button onClick={() => setIsEditing((editing) => !editing)} type="button">Edit post</button>
-              <button onClick={handleDeletePost} type="button">Delete post</button>
+              <button onClick={() => setIsEditing((editing) => !editing)} type="button">
+                Edit post
+              </button>
+              <button onClick={handleDeletePost} type="button">
+                Delete post
+              </button>
             </>
           )}
-          <button onClick={() => onReport?.('post', post.id)} type="button">Report post</button>
+          <button onClick={() => onReport?.('post', post.id)} type="button">
+            Report post
+          </button>
         </div>
       )}
 
@@ -201,29 +221,60 @@ export default function PostCard({
         <form className="post-edit-form" onSubmit={handleEditSubmit}>
           <label className="auth-field" htmlFor={`edit-title-${post.id}`}>
             <span>Title</span>
-            <input id={`edit-title-${post.id}`} maxLength="80" onChange={(event) => setEditTitle(event.target.value)} required value={editTitle} />
+            <input
+              id={`edit-title-${post.id}`}
+              maxLength="80"
+              onChange={(event) => setEditTitle(event.target.value)}
+              required
+              value={editTitle}
+            />
           </label>
           <div className="composer-grid">
             <label className="auth-field" htmlFor={`edit-category-${post.id}`}>
               <span>Category</span>
-              <select id={`edit-category-${post.id}`} onChange={(event) => setEditCategoryId(event.target.value)} value={editCategoryId}>
-                {categories.filter((category) => category.id !== 'all').map((category) => (
-                  <option key={category.id} value={category.id}>{category.label}</option>
-                ))}
+              <select
+                id={`edit-category-${post.id}`}
+                onChange={(event) => setEditCategoryId(event.target.value)}
+                value={editCategoryId}
+              >
+                {categories
+                  .filter((category) => category.id !== 'all')
+                  .map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.label}
+                    </option>
+                  ))}
               </select>
             </label>
             <label className="auth-field" htmlFor={`edit-hobby-${post.id}`}>
               <span>Hobby</span>
-              <input id={`edit-hobby-${post.id}`} maxLength="40" onChange={(event) => setEditHobby(event.target.value)} required value={editHobby} />
+              <input
+                id={`edit-hobby-${post.id}`}
+                maxLength="40"
+                onChange={(event) => setEditHobby(event.target.value)}
+                required
+                value={editHobby}
+              />
             </label>
           </div>
           <label className="auth-field" htmlFor={`edit-caption-${post.id}`}>
             <span>Caption</span>
-            <textarea id={`edit-caption-${post.id}`} maxLength="240" onChange={(event) => setEditCaption(event.target.value)} required rows="3" value={editCaption} />
+            <textarea
+              id={`edit-caption-${post.id}`}
+              maxLength="240"
+              onChange={(event) => setEditCaption(event.target.value)}
+              required
+              rows="3"
+              value={editCaption}
+            />
           </label>
           <div className="post-edit-actions">
-            <button className="text-button" onClick={() => setIsEditing(false)} type="button">Cancel</button>
-            <button className="auth-submit" type="submit">Save changes</button>
+            <button className="text-button" onClick={() => setIsEditing(false)} type="button">
+              Cancel
+            </button>
+            <button className="auth-submit" type="submit">
+              Save changes
+            </button>
           </div>
         </form>
       )}
@@ -238,55 +289,62 @@ export default function PostCard({
         ) : (
           <div className={`feed-art ${post.imageClass}`} role="img" aria-label={post.imageAlt || post.title} />
         )}
-        <div className="media-scrim" aria-hidden="true" />
-        <div className="media-label-row">
-          <span>{post.hobby}</span>
-          <small>{post.createdAtLabel || post.timeAgo}</small>
-        </div>
       </div>
 
       <div className="feed-content">
         <div className="feed-actions" aria-label="Post actions">
-          <div>
+          <div className="feed-actions-main">
             <button
+              aria-label={post.viewerHasLiked ? 'Unlike post' : 'Like post'}
               aria-pressed={post.viewerHasLiked}
               className={post.viewerHasLiked ? 'liked' : ''}
               onClick={handleLikeClick}
               type="button"
             >
-              {post.viewerHasLiked ? '♥ Liked' : '♡ Like'}
+              <AppIcon name="heart" size={22} />
             </button>
             <button
               aria-expanded={isCommentsOpen}
+              aria-label="Toggle comments"
               onClick={() => setIsCommentsOpen((isOpen) => !isOpen)}
               type="button"
             >
-              💬 Comment
+              <AppIcon name="comment" size={22} />
             </button>
-            <button onClick={() => onShare?.(post)} type="button">
-              ↗ Share
+            <button aria-label="Share post" onClick={() => onShare?.(post)} type="button">
+              <AppIcon name="send" size={22} />
             </button>
           </div>
-          <button aria-pressed={post.viewerHasSaved} onClick={handleSaveClick} type="button">
-            {post.viewerHasSaved ? '★ Saved' : '☆ Save'}
+          <button
+            aria-label={post.viewerHasSaved ? 'Remove from saved posts' : 'Save post'}
+            aria-pressed={post.viewerHasSaved}
+            className={post.viewerHasSaved ? 'saved' : ''}
+            onClick={handleSaveClick}
+            type="button"
+          >
+            <AppIcon name="bookmark" size={22} />
           </button>
         </div>
 
         <p className="post-stats">
-          <strong>{post.likesCount} likes</strong> · {post.commentsCount} comments · {post.shareCount} shares
+          <strong>{formatReactionLine(post)}</strong>
         </p>
 
         <p className="feed-caption">
-          <strong>{post.title}</strong> {post.caption}
+          <strong>{post.creator}</strong> {post.caption}
         </p>
 
         {!isCommentsOpen && previewComments.length > 0 && (
           <div className="comment-preview">
             {previewComments.map((comment) => (
-              <p key={comment.id}><strong>{comment.creator}</strong> {comment.text}</p>
+              <p key={comment.id}>
+                <strong>{comment.creator}</strong> {comment.text}
+              </p>
             ))}
             {post.commentsCount > previewComments.length && (
-              <button onClick={() => setIsCommentsOpen(true)} type="button">View all comments</button>
+              <button onClick={() => setIsCommentsOpen(true)} type="button">
+                View all {post.commentsCount} comments
+              </button>
             )}
           </div>
         )}
@@ -294,23 +352,20 @@ export default function PostCard({
         {actionError && <p className="auth-message">{actionError}</p>}
       </div>
 
+      <form className="comment-form inline-comment-form" onSubmit={handleCommentSubmit}>
+        <input
+          aria-label="Write a comment"
+          onChange={(event) => setCommentText(event.target.value)}
+          placeholder="Add a comment..."
+          value={commentText}
+        />
+        <button disabled={isSavingComment || !commentText.trim()} type="submit">
+          Post
+        </button>
+      </form>
+
       {isCommentsOpen && (
         <section className="comments-panel" aria-label={`Comments for ${post.title}`}>
-          <form className="comment-form" onSubmit={handleCommentSubmit}>
-            <div className="mini-avatar" aria-hidden="true">
-              {profile?.avatar || currentUser?.email?.slice(0, 1).toUpperCase()}
-            </div>
-            <input
-              aria-label="Write a comment"
-              onChange={(event) => setCommentText(event.target.value)}
-              placeholder="Add a supportive comment..."
-              value={commentText}
-            />
-            <button disabled={isSavingComment} type="submit">
-              Post
-            </button>
-          </form>
-
           {commentError && <p className="auth-message">{commentError}</p>}
 
           <div className="comment-list">
@@ -327,7 +382,9 @@ export default function PostCard({
                       <p>
                         <strong>{comment.creator}</strong> {comment.text}
                       </p>
-                      <span>{comment.handle} · {comment.createdAtLabel || comment.timeAgo}</span>
+                      <span>
+                        {comment.handle} · {comment.createdAtLabel || comment.timeAgo}
+                      </span>
                     </div>
                     {canDeleteComment && (
                       <button className="text-button" onClick={() => handleDeleteComment(comment.id)} type="button">

@@ -44,6 +44,11 @@ export default function ProfileView({ appProfile, errorMessage = '', livePosts =
     const username = formData.get('username').trim().replace(/^@+/, '').toLowerCase();
     const mainHobby = formData.get('mainHobby').trim();
     const bio = formData.get('bio').trim();
+    const interests = formData.get('interests')
+      .split(',')
+      .map((interest) => interest.trim())
+      .filter(Boolean)
+      .slice(0, 8);
 
     if (!displayName || !mainHobby || !bio) {
       setLocalError('Display name, main hobby, and bio cannot be blank.');
@@ -63,6 +68,8 @@ export default function ProfileView({ appProfile, errorMessage = '', livePosts =
       username,
       mainHobby,
       bio,
+      interests,
+      privacy: profile?.privacy,
     });
 
     setIsSaving(false);
@@ -89,11 +96,11 @@ export default function ProfileView({ appProfile, errorMessage = '', livePosts =
 
       {isEditing && (
         <section className="profile-edit-card" aria-label="Edit profile form">
-          <div className="auth-card-header">
-            <p className="eyebrow">Profile details</p>
-            <h2>Update your Vibely profile</h2>
-            <p>Changes save to Firestore and refresh your creator card across Hobby App.</p>
-          </div>
+            <div className="auth-card-header">
+              <p className="eyebrow">Profile details</p>
+              <h2>Update your Vibely profile</h2>
+            <p>Changes save to Firestore and refresh your creator card across Vibely.</p>
+            </div>
 
           <form className="profile-edit-form" onSubmit={handleSubmit}>
             <label className="auth-field" htmlFor="profile-display-name">
@@ -130,12 +137,24 @@ export default function ProfileView({ appProfile, errorMessage = '', livePosts =
               </select>
             </label>
 
+            <label className="auth-field" htmlFor="profile-interests">
+              <span>Interests/tags</span>
+              <input
+                defaultValue={(profile?.interests ?? []).join(', ')}
+                id="profile-interests"
+                maxLength="180"
+                name="interests"
+                placeholder="Ceramics, glazing, weekend markets"
+              />
+              <small>Add up to 8 comma-separated tags for discovery.</small>
+            </label>
+
             <label className="auth-field" htmlFor="profile-bio">
               <span>Short bio</span>
               <textarea
                 defaultValue={profile?.bio ?? ''}
                 id="profile-bio"
-                maxLength="140"
+                maxLength="160"
                 name="bio"
                 required
                 rows="4"
@@ -168,9 +187,9 @@ export default function ProfileView({ appProfile, errorMessage = '', livePosts =
           <p>Shown on posts, comments, and messages.</p>
         </article>
         <article className="insight-card">
-          <span>Profile status</span>
-          <strong>Live</strong>
-          <p>Your Vibely profile is connected to Firebase Auth.</p>
+          <span>Interests</span>
+          <strong>{(profile?.interests ?? []).slice(0, 3).join(', ') || profile?.mainHobby}</strong>
+          <p>Used for discovery and future suggested creators.</p>
         </article>
       </section>
 

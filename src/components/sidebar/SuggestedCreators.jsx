@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 
-export default function SuggestedCreators({ creators, onViewCreator }) {
+export default function SuggestedCreators({ creators, onOpenProfile, onViewCreator, profile }) {
   const [followedCreatorIds, setFollowedCreatorIds] = useState(() => new Set());
   const [rotationOffset, setRotationOffset] = useState(0);
 
@@ -9,7 +9,7 @@ export default function SuggestedCreators({ creators, onViewCreator }) {
       return [];
     }
 
-    return creators.map((_, index) => creators[(index + rotationOffset) % creators.length]);
+    return creators.map((_, index) => creators[(index + rotationOffset) % creators.length]).slice(0, 5);
   }, [creators, rotationOffset]);
 
   function toggleFollow(creatorId) {
@@ -27,13 +27,32 @@ export default function SuggestedCreators({ creators, onViewCreator }) {
   }
 
   return (
-    <section className="suggested-card">
+    <section className="suggested-card vibe-sidebar-card">
+      {profile && (
+        <div className="sidebar-account">
+          <button className="sidebar-account-main" onClick={onOpenProfile} type="button">
+            <span className="avatar sidebar-account-avatar" aria-hidden="true">
+              {profile.avatar}
+            </span>
+            <span>
+              <strong>{profile.name}</strong>
+              <small>{profile.username}</small>
+            </span>
+          </button>
+          <button className="text-button sidebar-account-link" onClick={onOpenProfile} type="button">
+            View
+          </button>
+        </div>
+      )}
+
       <div className="section-heading">
         <div>
-          <p>Suggested creators</p>
-          <span>{followedCreatorIds.size} following from this list</span>
+          <p>Suggested for you</p>
+          <span>{followedCreatorIds.size} followed from this list</span>
         </div>
-        <button type="button" onClick={() => setRotationOffset((offset) => offset + 1)}>Refresh</button>
+        <button type="button" onClick={() => setRotationOffset((offset) => offset + 1)}>
+          Refresh
+        </button>
       </div>
 
       <div className="creator-list">
@@ -41,19 +60,21 @@ export default function SuggestedCreators({ creators, onViewCreator }) {
           const isFollowing = followedCreatorIds.has(creator.id);
 
           return (
-            <article className="creator-row" key={creator.id}>
+            <article className="creator-row creator-row-compact" key={creator.id}>
               <div className="mini-avatar media-avatar" aria-hidden="true">
                 {creator.imageUrl ? <img alt="" src={creator.imageUrl} /> : creator.name.slice(0, 1)}
               </div>
               <button
                 className="creator-copy-button"
-                onClick={() => onViewCreator?.({
-                  avatar: creator.name.slice(0, 1),
-                  bio: `${creator.hobby} creator on Hobby App.`,
-                  displayName: creator.name,
-                  handle: creator.handle,
-                  mainHobby: creator.hobby,
-                })}
+                onClick={() =>
+                  onViewCreator?.({
+                    avatar: creator.name.slice(0, 1),
+                    bio: `${creator.hobby} creator on Vibely.`,
+                    displayName: creator.name,
+                    handle: creator.handle,
+                    mainHobby: creator.hobby,
+                  })
+                }
                 type="button"
               >
                 <strong>{creator.name}</strong>

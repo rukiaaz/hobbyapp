@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import AppIcon from '../common/AppIcon.jsx';
 import { validatePostMediaFile } from '../../utils/mediaValidation.js';
 
 function getMediaKind(file) {
@@ -7,6 +8,10 @@ function getMediaKind(file) {
   }
 
   return file.type.startsWith('video/') ? 'video' : 'image';
+}
+
+function getDraftStorageKey(profile) {
+  return profile?.uid ? `hobby-app:${profile.uid}:postDraft` : '';
 }
 
 export default function PostComposer({ categories, isSubmitting = false, onCreatePost, profile }) {
@@ -20,6 +25,42 @@ export default function PostComposer({ categories, isSubmitting = false, onCreat
   const [title, setTitle] = useState('');
 
   const mediaKind = getMediaKind(mediaFile);
+  const draftStorageKey = getDraftStorageKey(profile);
+
+  useEffect(() => {
+    if (!draftStorageKey || typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      const storedDraft = JSON.parse(window.localStorage.getItem(draftStorageKey) || '{}');
+
+      if (storedDraft.title || storedDraft.caption || storedDraft.hobby || storedDraft.categoryId) {
+        setTitle(storedDraft.title || '');
+        setCaption(storedDraft.caption || '');
+        setHobby(storedDraft.hobby || profile?.mainHobby || '');
+        setCategoryId(storedDraft.categoryId || categories[1]?.id || 'crafts');
+      }
+    } catch {
+      // Ignore damaged draft data and let the composer start cleanly.
+    }
+  }, [categories, draftStorageKey, profile?.mainHobby]);
+
+  useEffect(() => {
+    if (!draftStorageKey || typeof window === 'undefined') {
+      return;
+    }
+
+    const draft = { caption, categoryId, hobby, title };
+    const hasDraft = Object.values(draft).some((value) => String(value || '').trim());
+
+    if (hasDraft) {
+      window.localStorage.setItem(draftStorageKey, JSON.stringify(draft));
+      return;
+    }
+
+    window.localStorage.removeItem(draftStorageKey);
+  }, [caption, categoryId, draftStorageKey, hobby, title]);
 
   useEffect(() => {
     if (!mediaFile) {
@@ -54,10 +95,14 @@ export default function PostComposer({ categories, isSubmitting = false, onCreat
     setLocalError('');
     setMediaFile(null);
     setTitle('');
+
+    if (draftStorageKey && typeof window !== 'undefined') {
+      window.localStorage.removeItem(draftStorageKey);
+    }
   }
 
   function closeComposer() {
-    clearDraft();
+    setLocalError('');
     setIsModalOpen(false);
   }
 
@@ -113,7 +158,7 @@ export default function PostComposer({ categories, isSubmitting = false, onCreat
           {profile?.avatar || profile?.displayName?.slice(0, 1) || 'H'}
         </div>
         <button className="composer-trigger" onClick={() => setIsModalOpen(true)} type="button">
-          Post something about {profile?.mainHobby || 'your hobby'}...
+          Share something about {profile?.mainHobby || 'your hobby'}...
         </button>
         <button
           className="composer-media-shortcut"
@@ -121,7 +166,7 @@ export default function PostComposer({ categories, isSubmitting = false, onCreat
           type="button"
           aria-label="Create a photo or video post"
         >
-          📷
+          <AppIcon name="create" size={18} />
         </button>
       </section>
 
@@ -153,7 +198,7 @@ export default function PostComposer({ categories, isSubmitting = false, onCreat
                 type="button"
                 aria-label="Close post composer"
               >
-                ×
+                x
               </button>
             </div>
 
@@ -164,7 +209,7 @@ export default function PostComposer({ categories, isSubmitting = false, onCreat
                   id="post-title"
                   maxLength="80"
                   onChange={(event) => setTitle(event.target.value)}
-                  placeholder="Today&apos;s pottery wheel practice"
+                  placeholder="Today's pottery wheel practice"
                   required
                   value={title}
                 />
@@ -221,15 +266,14 @@ export default function PostComposer({ categories, isSubmitting = false, onCreat
                   onChange={(event) => handleMediaChange(event.target.files?.[0] ?? null)}
                   type="file"
                 />
-                {mediaPreview && (
-                  mediaKind === 'video' ? (
+                {mediaPreview &&
+                  (mediaKind === 'video' ? (
                     <video controls playsInline preload="metadata" src={mediaPreview} />
                   ) : (
                     <img alt="Selected post preview" src={mediaPreview} />
-                  )
-                )}
+                  ))}
                 <label className={mediaPreview ? 'media-change-button' : 'upload-placeholder'} htmlFor="post-media">
-                  <span aria-hidden="true">{mediaPreview ? '↻' : '＋'}</span>
+                  <span aria-hidden="true">{mediaPreview ? 'Update' : 'Add'}</span>
                   <strong>{mediaPreview ? 'Change media' : 'Add photo or video'}</strong>
                   {!mediaPreview && <small>Tap the icon to choose media from your device</small>}
                 </label>
@@ -245,7 +289,10 @@ export default function PostComposer({ categories, isSubmitting = false, onCreat
 
               <div className="composer-modal-actions">
                 <button className="text-button" disabled={isSubmitting} onClick={closeComposer} type="button">
-                  Cancel
+                  Save draft
+                </button>
+                <button className="text-button" disabled={isSubmitting} onClick={clearDraft} type="button">
+                  Discard
                 </button>
                 <button className="auth-submit" disabled={isSubmitting} type="submit">
                   {isSubmitting ? 'Posting...' : 'Post to feed'}

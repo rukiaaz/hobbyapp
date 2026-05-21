@@ -12,7 +12,6 @@ export default function HobbyTabs({ categories, activeCategoryId = 'all', onCate
             onClick={() => onCategoryChange?.(category.id)}
             type="button"
           >
-            <span aria-hidden="true">{category.icon}</span>
             {category.label}
           </button>
         );

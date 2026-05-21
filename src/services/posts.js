@@ -5,6 +5,7 @@ import {
   doc,
   getDoc,
   increment,
+  limit as queryLimit,
   onSnapshot,
   orderBy,
   query,
@@ -14,7 +15,9 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore';
+import { callAppFunction, shouldUseDirectFirestoreFallback } from './api.js';
 import { db } from './firebase.js';
+import { enforceClientCooldown } from '../utils/actionGuards.js';
 import { validatePostMediaFile } from '../utils/mediaValidation.js';
 
 const cloudinaryConfig = {
@@ -68,6 +71,76 @@ function getReadableTimestamp(date) {
   }).format(date);
 }
 
+function getMediaResourceType(mediaFile) {
+  return mediaFile?.type?.startsWith('video/') ? 'video' : 'image';
+}
+
+async function uploadPostMediaWithUnsignedPreset(mediaFile) {
+  if (!cloudinaryConfig.cloudName || !cloudinaryConfig.uploadPreset) {
+    throw createServiceError(
+      'cloudinary/not-configured',
+      'Cloudinary cloud name and unsigned upload preset are required for local direct uploads.',
+    );
+  }
+
+  const formData = new FormData();
+  formData.append('file', mediaFile);
+  formData.append('upload_preset', cloudinaryConfig.uploadPreset);
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/auto/upload`,
+    {
+      method: 'POST',
+      body: formData,
+    },
+  );
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw createServiceError(
+      'cloudinary/upload-failed',
+      result?.error?.message || 'Cloudinary upload failed.',
+    );
+  }
+
+  return result;
+}
+
+async function uploadPostMediaWithSignature(mediaFile) {
+  enforceClientCooldown('uploadSignature');
+
+  const resourceType = getMediaResourceType(mediaFile);
+  const signature = await callAppFunction('createCloudinaryUploadSignature', {
+    kind: 'post',
+    resourceType,
+  });
+
+  const formData = new FormData();
+  formData.append('file', mediaFile);
+  formData.append('api_key', signature.apiKey);
+  formData.append('timestamp', signature.timestamp);
+  formData.append('signature', signature.signature);
+  formData.append('folder', signature.folder);
+
+  const response = await fetch(
+    `https://api.cloudinary.com/v1_1/${signature.cloudName}/${signature.resourceType}/upload`,
+    {
+      method: 'POST',
+      body: formData,
+    },
+  );
+  const result = await response.json();
+
+  if (!response.ok) {
+    throw createServiceError(
+      'cloudinary/upload-failed',
+      result?.error?.message || 'Cloudinary upload failed.',
+    );
+  }
+
+  return result;
+}
+
 async function uploadPostMedia(mediaFile) {
   if (!mediaFile) {
     return {
@@ -86,34 +159,9 @@ async function uploadPostMedia(mediaFile) {
     throw createServiceError('media/invalid-file', validation.message);
   }
 
-  if (!cloudinaryConfig.cloudName || !cloudinaryConfig.uploadPreset) {
-    throw createServiceError(
-      'cloudinary/not-configured',
-      'Cloudinary cloud name and unsigned upload preset are required for photo/video uploads.',
-    );
-  }
-
-  const formData = new FormData();
-  formData.append('file', mediaFile);
-  formData.append('upload_preset', cloudinaryConfig.uploadPreset);
-
-  const response = await fetch(
-    `https://api.cloudinary.com/v1_1/${cloudinaryConfig.cloudName}/auto/upload`,
-    {
-      method: 'POST',
-      body: formData,
-    },
-  );
-
-  const result = await response.json();
-
-  if (!response.ok) {
-    throw createServiceError(
-      'cloudinary/upload-failed',
-      result?.error?.message || 'Cloudinary upload failed.',
-    );
-  }
-
+  const result = shouldUseDirectFirestoreFallback()
+    ? await uploadPostMediaWithUnsignedPreset(mediaFile)
+    : await uploadPostMediaWithSignature(mediaFile);
   const mediaType = result.resource_type === 'video' ? 'video' : 'image';
 
   return {
@@ -163,7 +211,7 @@ async function mapPostDocument(postDocument, currentUserId) {
 }
 
 export function listenToPosts(currentUserId, onChange, onError) {
-  const postsQuery = query(collection(db, 'posts'), orderBy('createdAt', 'desc'));
+  const postsQuery = query(collection(db, 'posts'), orderBy('createdAt', 'desc'), queryLimit(50));
 
   return onSnapshot(
     postsQuery,
@@ -183,7 +231,12 @@ export function listenToUserPosts(userId, currentUserId, onChange, onError) {
     return () => {};
   }
 
-  const postsQuery = query(collection(db, 'posts'), where('authorId', '==', userId), orderBy('createdAt', 'desc'));
+  const postsQuery = query(
+    collection(db, 'posts'),
+    where('authorId', '==', userId),
+    orderBy('createdAt', 'desc'),
+    queryLimit(50),
+  );
 
   return onSnapshot(
     postsQuery,
@@ -198,7 +251,18 @@ export function listenToUserPosts(userId, currentUserId, onChange, onError) {
 }
 
 export async function createPost(user, profile, postData) {
+  enforceClientCooldown('post');
   const mediaUpload = await uploadPostMedia(postData.mediaFile ?? postData.imageFile);
+
+  if (!shouldUseDirectFirestoreFallback()) {
+    return callAppFunction('createPost', {
+      caption: postData.caption,
+      categoryId: postData.categoryId,
+      hobby: postData.hobby,
+      media: mediaUpload,
+      title: postData.title,
+    });
+  }
 
   const postRef = await addDoc(collection(db, 'posts'), {
     authorId: user.uid,
@@ -231,6 +295,10 @@ export async function createPost(user, profile, postData) {
 }
 
 export async function updatePost(postId, postData) {
+  if (!shouldUseDirectFirestoreFallback()) {
+    return callAppFunction('updatePost', { postId, ...postData });
+  }
+
   const updates = {
     categoryId: postData.categoryId,
     hobby: postData.hobby.trim(),
@@ -243,6 +311,10 @@ export async function updatePost(postId, postData) {
 }
 
 export async function deletePost(postId) {
+  if (!shouldUseDirectFirestoreFallback()) {
+    return callAppFunction('deletePost', { postId });
+  }
+
   const postRef = doc(db, 'posts', postId);
   const postSnapshot = await getDoc(postRef);
   const authorId = postSnapshot.data()?.authorId;
@@ -257,15 +329,26 @@ export async function deletePost(postId) {
 }
 
 export async function togglePostLike(postId, userId) {
+  enforceClientCooldown('reaction');
+
+  if (!shouldUseDirectFirestoreFallback()) {
+    return callAppFunction('togglePostLike', { postId });
+  }
+
   const postRef = doc(db, 'posts', postId);
   const likeRef = doc(db, 'posts', postId, 'likes', userId);
 
   await runTransaction(db, async (transaction) => {
-    const likeSnapshot = await transaction.get(likeRef);
+    const [postSnapshot, likeSnapshot] = await Promise.all([
+      transaction.get(postRef),
+      transaction.get(likeRef),
+    ]);
+
+    const currentLikes = postSnapshot.data()?.likesCount ?? 0;
 
     if (likeSnapshot.exists()) {
       transaction.delete(likeRef);
-      transaction.update(postRef, { likesCount: increment(-1) });
+      transaction.update(postRef, { likesCount: Math.max(0, currentLikes - 1) });
       return;
     }
 
@@ -273,7 +356,7 @@ export async function togglePostLike(postId, userId) {
       userId,
       createdAt: serverTimestamp(),
     });
-    transaction.update(postRef, { likesCount: increment(1) });
+    transaction.update(postRef, { likesCount: currentLikes + 1 });
   });
 }
 
@@ -283,7 +366,7 @@ export function listenToSavedPosts(userId, onChange, onError) {
     return () => {};
   }
 
-  const savedQuery = query(collection(db, 'users', userId, 'savedPosts'), orderBy('savedAt', 'desc'));
+  const savedQuery = query(collection(db, 'users', userId, 'savedPosts'), orderBy('savedAt', 'desc'), queryLimit(100));
 
   return onSnapshot(
     savedQuery,
@@ -295,6 +378,13 @@ export function listenToSavedPosts(userId, onChange, onError) {
 }
 
 export async function togglePostSave(post, userId) {
+  enforceClientCooldown('save');
+
+  if (!shouldUseDirectFirestoreFallback()) {
+    const result = await callAppFunction('togglePostSave', { post });
+    return result.isSaved;
+  }
+
   const savedRef = doc(db, 'users', userId, 'savedPosts', post.id);
   const savedSnapshot = await getDoc(savedRef);
 
@@ -321,7 +411,7 @@ export async function togglePostSave(post, userId) {
 }
 
 export function listenToComments(postId, onChange, onError) {
-  const commentsQuery = query(collection(db, 'posts', postId, 'comments'), orderBy('createdAt', 'asc'));
+  const commentsQuery = query(collection(db, 'posts', postId, 'comments'), orderBy('createdAt', 'asc'), queryLimit(100));
 
   return onSnapshot(
     commentsQuery,
@@ -347,13 +437,27 @@ export function listenToComments(postId, onChange, onError) {
 }
 
 export async function deletePostComment(postId, commentId) {
+  if (!shouldUseDirectFirestoreFallback()) {
+    return callAppFunction('deletePostComment', { postId, commentId });
+  }
+
+  const postRef = doc(db, 'posts', postId);
+  const postSnapshot = await getDoc(postRef);
+  const commentsCount = postSnapshot.data()?.commentsCount ?? 0;
+
   await deleteDoc(doc(db, 'posts', postId, 'comments', commentId));
-  await updateDoc(doc(db, 'posts', postId), {
-    commentsCount: increment(-1),
+  await updateDoc(postRef, {
+    commentsCount: Math.max(0, commentsCount - 1),
   });
 }
 
 export async function addPostComment(postId, user, profile, text) {
+  enforceClientCooldown('comment');
+
+  if (!shouldUseDirectFirestoreFallback()) {
+    return callAppFunction('addPostComment', { postId, text });
+  }
+
   await addDoc(collection(db, 'posts', postId, 'comments'), {
     authorId: user.uid,
     creator: profile.displayName,
@@ -369,8 +473,18 @@ export async function addPostComment(postId, user, profile, text) {
 }
 
 export async function recordPostShare(postId) {
-  await updateDoc(doc(db, 'posts', postId), {
-    shareCount: increment(1),
+  enforceClientCooldown('share');
+
+  if (!shouldUseDirectFirestoreFallback()) {
+    return callAppFunction('recordPostShare', { postId });
+  }
+
+  const postRef = doc(db, 'posts', postId);
+  const postSnapshot = await getDoc(postRef);
+  const shareCount = postSnapshot.data()?.shareCount ?? 0;
+
+  await updateDoc(postRef, {
+    shareCount: shareCount + 1,
   });
 }
 
